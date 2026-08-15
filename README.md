@@ -88,6 +88,13 @@ just conformance   # interoperability against upstream
 `riso` calls `git` and `curl` at run time and nothing else; everything it
 needs is in the binary. Packaging notes are in `packaging/`.
 
+## Thanks
+
+The theme format, the template dialect and the layering that makes an
+incomplete theme impossible were worked out in
+[Omarchy](https://github.com/basecamp/omarchy) first. `riso` implements that
+design rather than inventing a second one. See [NOTICE](NOTICE).
+
 ## Status
 
 Early, and honest about it. Rendering, applying, backgrounds, themes, plugins,

@@ -20,6 +20,7 @@
           nativeBuildInputs = [ pkgs.installShellFiles ];
           postInstall = ''
             installManPage docs/riso.1
+            install -Dm644 NOTICE $out/share/doc/riso/NOTICE
           '';
           meta = {
             description = "Modular ricing framework";

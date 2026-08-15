@@ -24,6 +24,7 @@ assets = [
     ["target/release/riso", "usr/bin/", "755"],
     ["../../docs/riso.1", "usr/share/man/man1/", "644"],
     ["../../README.md", "usr/share/doc/riso/README.md", "644"],
+    ["../../NOTICE", "usr/share/doc/riso/NOTICE", "644"],
 ]
 
 [package.metadata.generate-rpm]
@@ -32,6 +33,7 @@ assets = [
     { source = "target/release/riso", dest = "/usr/bin/riso", mode = "755" },
     { source = "docs/riso.1", dest = "/usr/share/man/man1/riso.1", mode = "644" },
     { source = "README.md", dest = "/usr/share/doc/riso/README.md", mode = "644" },
+    { source = "NOTICE", dest = "/usr/share/doc/riso/NOTICE", mode = "644" },
 ]
 
 [dependencies]

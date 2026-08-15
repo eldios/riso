@@ -1,0 +1,31 @@
+# Acknowledgements
+
+riso would not exist in this shape without Omarchy.
+
+The theme format riso reads, the template dialect it renders, and the layering
+that lets a hand-written file win over a generated one were all worked out in
+Omarchy first. riso implements that design rather than inventing its own,
+because a theme should not have to be written twice.
+
+Concretely, the following come from Omarchy:
+
+- the `colors.toml` palette format, its semantic key names, and the cascade
+  that resolves a short palette into a full one
+- the template dialect: `{{ key }}`, `{{ key_strip }}`, `{{ key_rgb }}`,
+  `{{ mix a b 30% }}`, and the gradient helpers
+- the arrangement where a theme ships files that take precedence over
+  generated ones, and where user templates take precedence over built-in ones
+- the shape of several built-in templates, which follow Omarchy's for the
+  applications both projects theme
+
+riso's conformance suite renders every theme Omarchy ships and compares the
+result byte for byte against Omarchy's own renderer. That suite exists so the
+compatibility stays real rather than claimed, and it is only possible because
+Omarchy's implementation is there to check against.
+
+Omarchy is MIT licensed, Copyright (c) David Heinemeier Hansson, and is the
+work of a large number of contributors.
+
+  https://github.com/basecamp/omarchy
+
+Thanks to all of them.
