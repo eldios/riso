@@ -127,10 +127,7 @@ fn apply_gradient(parts: &[&str], palette: &Palette) -> Option<String> {
 }
 
 fn is_key(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    !value.is_empty() && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// `50`, `0.5` or `50%`. A leading dot or a sign is not accepted.
@@ -207,22 +204,28 @@ mod tests {
 
     #[test]
     fn substitutes_every_occurrence() {
-        assert_eq!(
-            render_str("{{ accent }}/{{ accent }}"),
-            "#7aa2f7/#7aa2f7"
-        );
+        assert_eq!(render_str("{{ accent }}/{{ accent }}"), "#7aa2f7/#7aa2f7");
     }
 
     #[test]
     fn applies_mix_in_all_three_spellings() {
         assert_eq!(render_str("{{ mix background foreground 15% }}"), "#2f3240");
-        assert_eq!(render_str("{{ mix_strip background foreground 15% }}"), "2f3240");
-        assert_eq!(render_str("{{ mix_rgb background foreground 15% }}"), "47,50,64");
+        assert_eq!(
+            render_str("{{ mix_strip background foreground 15% }}"),
+            "2f3240"
+        );
+        assert_eq!(
+            render_str("{{ mix_rgb background foreground 15% }}"),
+            "47,50,64"
+        );
     }
 
     #[test]
     fn tolerates_extra_space_around_a_function() {
-        assert_eq!(render_str("{{  mix background foreground 15%  }}"), "#2f3240");
+        assert_eq!(
+            render_str("{{  mix background foreground 15%  }}"),
+            "#2f3240"
+        );
     }
 
     #[test]

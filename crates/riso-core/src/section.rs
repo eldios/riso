@@ -168,7 +168,10 @@ mod tests {
     fn replaces_a_section_in_the_middle() {
         let document = "[bar]\na = 1\n\n[lock]\nold = 1\nstale = 2\n\n[menu]\nb = 2\n";
         let got = apply_section(document, "lock", "text = \"#fff\"\n");
-        assert_eq!(got, "[bar]\na = 1\n\n[lock]\ntext = \"#fff\"\n[menu]\nb = 2\n");
+        assert_eq!(
+            got,
+            "[bar]\na = 1\n\n[lock]\ntext = \"#fff\"\n[menu]\nb = 2\n"
+        );
     }
 
     #[test]
@@ -186,7 +189,11 @@ mod tests {
 
     #[test]
     fn replaces_a_trailing_section() {
-        let got = apply_section("[bar]\na = 1\n\n[lock]\nold = 1\n", "lock", "text = \"#fff\"\n");
+        let got = apply_section(
+            "[bar]\na = 1\n\n[lock]\nold = 1\n",
+            "lock",
+            "text = \"#fff\"\n",
+        );
         assert_eq!(got, "[bar]\na = 1\n\n\n[lock]\ntext = \"#fff\"\n");
     }
 
@@ -221,8 +228,11 @@ mod tests {
     #[test]
     fn applies_an_override_file_to_the_shell_document() {
         let dir = tempfile::tempdir().expect("tempdir");
-        std::fs::write(dir.path().join("shell.toml"), "[lock]\nold = 1\n[menu]\nb = 2\n")
-            .expect("seed");
+        std::fs::write(
+            dir.path().join("shell.toml"),
+            "[lock]\nold = 1\n[menu]\nb = 2\n",
+        )
+        .expect("seed");
         std::fs::write(dir.path().join("shell.lock.toml"), "text = \"#fff\"\n").expect("seed");
 
         let applied = apply_overrides(dir.path()).expect("apply");

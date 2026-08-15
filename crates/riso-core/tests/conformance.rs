@@ -45,7 +45,11 @@ fn theme_names() -> Vec<String> {
 #[test]
 fn resolves_every_shipped_palette_exactly_like_upstream() {
     let themes = theme_names();
-    assert!(themes.len() >= 20, "expected the full theme set, got {}", themes.len());
+    assert!(
+        themes.len() >= 20,
+        "expected the full theme set, got {}",
+        themes.len()
+    );
 
     for theme in themes {
         let expected = read(&fixtures().join("palette").join(format!("{theme}.tsv")));

@@ -75,12 +75,22 @@ const BRIGHT_DERIVATIONS: &[(&str, &str)] = &[
 /// Something the theme got wrong that would otherwise vanish silently.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Warning {
-    UnsupportedKey { line: usize },
-    UnsupportedValue { line: usize, key: String },
+    UnsupportedKey {
+        line: usize,
+    },
+    UnsupportedValue {
+        line: usize,
+        key: String,
+    },
     /// A key resolved to nothing, so `{{ key }}` will render as an empty string.
-    EmptyValue { key: String },
+    EmptyValue {
+        key: String,
+    },
     /// A derivation was skipped because its source was not a `#rrggbb` color.
-    UnderivableColor { key: String, source: String },
+    UnderivableColor {
+        key: String,
+        source: String,
+    },
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -169,7 +179,13 @@ impl Palette {
 
         self.derive("brown", "orange", BLACK, "50%", &mut warnings);
         self.derive("dark_background", "background", BLACK, "25%", &mut warnings);
-        self.derive("darker_background", "background", BLACK, "50%", &mut warnings);
+        self.derive(
+            "darker_background",
+            "background",
+            BLACK,
+            "50%",
+            &mut warnings,
+        );
         for (target, source) in BRIGHT_DERIVATIONS {
             self.derive(target, source, WHITE, "20%", &mut warnings);
         }
@@ -337,7 +353,8 @@ mod tests {
 
     #[test]
     fn parses_quoted_values_and_ignores_trailing_comments() {
-        let (palette, warnings) = Palette::parse("accent = \"#7aa2f7\" # the blue\nmode = 'dark'\n");
+        let (palette, warnings) =
+            Palette::parse("accent = \"#7aa2f7\" # the blue\nmode = 'dark'\n");
         assert_eq!(palette.get("accent").as_deref(), Some("#7aa2f7"));
         assert_eq!(palette.get("mode").as_deref(), Some("dark"));
         assert!(warnings.is_empty());
@@ -379,7 +396,8 @@ mod tests {
 
     #[test]
     fn fills_semantic_names_from_ansi_slots() {
-        let palette = resolved("color0 = \"#111111\"\ncolor1 = \"#ff0000\"\ncolor7 = \"#eeeeee\"\n");
+        let palette =
+            resolved("color0 = \"#111111\"\ncolor1 = \"#ff0000\"\ncolor7 = \"#eeeeee\"\n");
         assert_eq!(palette.get("background").as_deref(), Some("#111111"));
         assert_eq!(palette.get("red").as_deref(), Some("#ff0000"));
         assert_eq!(palette.get("foreground").as_deref(), Some("#eeeeee"));
@@ -387,7 +405,8 @@ mod tests {
 
     #[test]
     fn derives_missing_shades_by_blending() {
-        let palette = resolved("background = \"#1a1b26\"\nforeground = \"#a9b1d6\"\nred = \"#f7768e\"\n");
+        let palette =
+            resolved("background = \"#1a1b26\"\nforeground = \"#a9b1d6\"\nred = \"#f7768e\"\n");
         assert_eq!(palette.get("dark_background").as_deref(), Some("#14141d"));
         assert_eq!(palette.get("darker_background").as_deref(), Some("#0d0e13"));
         assert_eq!(palette.get("bright_red").as_deref(), Some("#f991a5"));
@@ -396,11 +415,15 @@ mod tests {
     #[test]
     fn detects_mode_from_background_luminance() {
         assert_eq!(
-            resolved("background = \"#1a1b26\"\n").get("mode").as_deref(),
+            resolved("background = \"#1a1b26\"\n")
+                .get("mode")
+                .as_deref(),
             Some("dark")
         );
         assert_eq!(
-            resolved("background = \"#eff1f5\"\n").get("mode").as_deref(),
+            resolved("background = \"#eff1f5\"\n")
+                .get("mode")
+                .as_deref(),
             Some("light")
         );
     }

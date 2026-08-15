@@ -77,7 +77,11 @@ fn run(cli: Cli) -> Result<(), String> {
             for outcome in &report.outcomes {
                 match outcome {
                     Outcome::Rendered { target, .. } => {
-                        println!("{} {}", if dry_run { "would write" } else { "wrote" }, target.display());
+                        println!(
+                            "{} {}",
+                            if dry_run { "would write" } else { "wrote" },
+                            target.display()
+                        );
                     }
                     Outcome::Kept { target, .. } => {
                         println!("kept {} (provided by the theme)", target.display());

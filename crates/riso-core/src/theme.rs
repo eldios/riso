@@ -19,9 +19,15 @@ const TEMPLATE_EXTENSION: &str = "tpl";
 /// What happened to one output file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
-    Rendered { template: PathBuf, target: PathBuf },
+    Rendered {
+        template: PathBuf,
+        target: PathBuf,
+    },
     /// The target already existed, so the template did not run.
-    Kept { target: PathBuf, template: PathBuf },
+    Kept {
+        target: PathBuf,
+        template: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -126,7 +132,10 @@ fn templates_in(dir: &Path) -> Result<Vec<PathBuf>, IoError> {
     let mut paths: Vec<PathBuf> = entries
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == TEMPLATE_EXTENSION))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|ext| ext == TEMPLATE_EXTENSION)
+        })
         .collect();
     paths.sort();
     Ok(paths)
@@ -159,8 +168,7 @@ mod tests {
         let out = dir.path().join("out");
         write(&templates.join("app.conf.tpl"), "bg={{ background }}");
 
-        let report =
-            render_theme(&palette(), &[templates], &out, false).expect("render");
+        let report = render_theme(&palette(), &[templates], &out, false).expect("render");
 
         assert_eq!(
             std::fs::read_to_string(out.join("app.conf")).expect("read"),
@@ -233,7 +241,10 @@ mod tests {
     #[test]
     fn loads_a_palette_and_honours_the_light_mode_marker() {
         let dir = tempfile::tempdir().expect("tempdir");
-        write(&dir.path().join("colors.toml"), "background = \"#000000\"\n");
+        write(
+            &dir.path().join("colors.toml"),
+            "background = \"#000000\"\n",
+        );
         let (palette, _) = load_palette(dir.path()).expect("load");
         assert_eq!(palette.get("mode").as_deref(), Some("dark"));
 

@@ -166,7 +166,10 @@ mod tests {
             Rgb::from_hex("1a2b3c"),
             Err(ColorError::MissingHash("1a2b3c".into()))
         );
-        assert_eq!(Rgb::from_hex("#1a2b"), Err(ColorError::Length("#1a2b".into())));
+        assert_eq!(
+            Rgb::from_hex("#1a2b"),
+            Err(ColorError::Length("#1a2b".into()))
+        );
         assert_eq!(
             Rgb::from_hex("#gggggg"),
             Err(ColorError::Digits("#gggggg".into()))
