@@ -8,6 +8,7 @@ pub mod apply;
 pub mod atomic;
 pub mod background;
 pub mod builtin;
+pub mod catalog;
 pub mod color;
 pub mod desktop;
 pub mod error;

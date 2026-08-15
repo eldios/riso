@@ -12,6 +12,8 @@ use thiserror::Error;
 pub enum ReloadError {
     #[error("could not run '{0}': {1}")]
     Spawn(String, #[source] std::io::Error),
+    #[error("'{0}' failed: {1}")]
+    Failed(String, String),
 }
 
 /// Runs a command, or pretends to.
@@ -19,6 +21,12 @@ pub trait Executor {
     /// Run `program` with `args`. A non-zero exit is not an error: consumers
     /// that are not running are the normal case, not a failure to report.
     fn run(&self, program: &str, args: &[String]) -> Result<(), ReloadError>;
+
+    /// Run `program` and return what it printed.
+    ///
+    /// Unlike `run`, a non-zero exit is an error here: a caller asking for
+    /// output cannot do anything useful with a failed command's empty string.
+    fn capture(&self, program: &str, args: &[String]) -> Result<String, ReloadError>;
 }
 
 pub struct ProcessExecutor;
@@ -33,17 +41,39 @@ impl Executor for ProcessExecutor {
             .map(|_| ())
             .map_err(|e| ReloadError::Spawn(program.to_owned(), e))
     }
+
+    fn capture(&self, program: &str, args: &[String]) -> Result<String, ReloadError> {
+        let output = Command::new(program)
+            .args(args)
+            .output()
+            .map_err(|e| ReloadError::Spawn(program.to_owned(), e))?;
+
+        if !output.status.success() {
+            return Err(ReloadError::Failed(
+                program.to_owned(),
+                String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+            ));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
 }
 
 /// An executor that records instead of running, for tests and dry runs.
 #[derive(Debug, Default)]
 pub struct RecordingExecutor {
     calls: std::cell::RefCell<Vec<String>>,
+    /// What `capture` should return, in call order.
+    output: std::cell::RefCell<Vec<String>>,
 }
 
 impl RecordingExecutor {
     pub fn calls(&self) -> Vec<String> {
         self.calls.borrow().clone()
+    }
+
+    /// Queue what the next `capture` calls will return.
+    pub fn will_output(&self, lines: &[&str]) {
+        *self.output.borrow_mut() = lines.iter().rev().map(|l| (*l).to_owned()).collect();
     }
 }
 
@@ -53,6 +83,11 @@ impl Executor for RecordingExecutor {
             .borrow_mut()
             .push(format!("{program} {}", args.join(" ")));
         Ok(())
+    }
+
+    fn capture(&self, program: &str, args: &[String]) -> Result<String, ReloadError> {
+        self.run(program, args)?;
+        Ok(self.output.borrow_mut().pop().unwrap_or_default())
     }
 }
 
