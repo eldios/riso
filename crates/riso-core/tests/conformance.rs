@@ -42,6 +42,11 @@ fn theme_names() -> Vec<String> {
     names
 }
 
+/// Every key upstream resolves must resolve here to the same value.
+///
+/// Containment rather than equality: riso adds typography keys that upstream
+/// keeps outside the theme, so its palette is a superset. The promise this
+/// guards is that nothing upstream produces is missing or different.
 #[test]
 fn resolves_every_shipped_palette_exactly_like_upstream() {
     let themes = theme_names();
@@ -53,12 +58,16 @@ fn resolves_every_shipped_palette_exactly_like_upstream() {
 
     for theme in themes {
         let expected = read(&fixtures().join("palette").join(format!("{theme}.tsv")));
-        let actual: String = resolved(&theme)
-            .iter()
-            .map(|(key, value)| format!("{key}\t{value}\n"))
-            .collect();
+        let palette = resolved(&theme);
 
-        assert_eq!(actual, expected, "palette mismatch for theme {theme}");
+        for line in expected.lines() {
+            let (key, value) = line.split_once('\t').expect("key<TAB>value");
+            assert_eq!(
+                palette.get(key).as_deref(),
+                Some(value),
+                "{theme}: key '{key}' does not match upstream"
+            );
+        }
     }
 }
 
@@ -107,5 +116,18 @@ fn leaves_no_placeholder_behind_in_any_shipped_template() {
                 source.display()
             );
         }
+    }
+}
+
+/// The keys riso adds on top, which upstream has no equivalent for.
+#[test]
+fn adds_typography_keys_upstream_leaves_out() {
+    let palette = resolved("tokyo-night");
+
+    for key in ["font_mono", "font_ui", "font_size"] {
+        assert!(
+            palette.non_empty(key).is_some(),
+            "'{key}' should resolve to a usable default"
+        );
     }
 }

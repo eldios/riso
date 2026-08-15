@@ -65,32 +65,50 @@ pub fn load_palette(theme_dir: &Path) -> Result<(Palette, Vec<Warning>), IoError
     Ok((palette, warnings))
 }
 
-/// Render every template into `out_dir`.
+/// How a render should behave.
+#[derive(Debug, Clone, Default)]
+pub struct Options {
+    /// Searched in order; the first to claim an output name wins.
+    pub template_dirs: Vec<PathBuf>,
+    /// Restrict rendering to these output names. Empty renders everything.
+    pub only: Vec<String>,
+    /// Report what would be written without writing it.
+    pub dry_run: bool,
+    /// Fall back to the templates compiled into the binary.
+    pub builtin: bool,
+}
+
+impl Options {
+    /// Everything riso knows how to render, written to disk.
+    pub fn all(template_dirs: Vec<PathBuf>) -> Self {
+        Self {
+            template_dirs,
+            builtin: true,
+            ..Default::default()
+        }
+    }
+}
+
+/// Render templates into `out_dir`.
 ///
-/// `template_dirs` are searched in order and the first one to claim an output
-/// name wins, so caller-supplied directories should come before built-in ones.
-///
-/// `only` restricts rendering to those output names; empty renders every
-/// template.
+/// Precedence runs from strongest to weakest: a file already in `out_dir`,
+/// then each template directory in turn, then the built-ins. A desktop that
+/// ships its own templates therefore keeps its own look, and the built-ins
+/// only fill what nothing else claimed.
 pub fn render_theme(
     palette: &Palette,
-    template_dirs: &[PathBuf],
     out_dir: &Path,
-    dry_run: bool,
-    only: &[String],
+    options: &Options,
 ) -> Result<Report, IoError> {
     let mut report = Report::default();
     let mut claimed: BTreeMap<String, ()> = BTreeMap::new();
 
-    for dir in template_dirs {
+    for dir in &options.template_dirs {
         for path in templates_in(dir)? {
             let Some(name) = output_name(&path) else {
                 continue;
             };
-            if !only.is_empty() && !only.contains(&name) {
-                continue;
-            }
-            if claimed.contains_key(&name) {
+            if skip(&name, options, &claimed) {
                 continue;
             }
             claimed.insert(name.clone(), ());
@@ -106,23 +124,64 @@ pub fn render_theme(
 
             let source =
                 std::fs::read_to_string(&path).map_err(|e| IoError::Read(path.clone(), e))?;
-            let rendered = template::render(&source, palette);
-            if !dry_run {
-                write_atomic(&target, &rendered)?;
+            write_rendered(&mut report, palette, &source, path, target, options)?;
+        }
+    }
+
+    if options.builtin {
+        for template in crate::builtin::TEMPLATES {
+            let name = template.name.to_owned();
+            if skip(&name, options, &claimed) {
+                continue;
             }
-            report.outcomes.push(Outcome::Rendered {
-                template: path,
+            claimed.insert(name.clone(), ());
+
+            let target = out_dir.join(&name);
+            if target.exists() {
+                report.outcomes.push(Outcome::Kept {
+                    target,
+                    template: PathBuf::from(format!("<built-in>/{name}")),
+                });
+                continue;
+            }
+
+            write_rendered(
+                &mut report,
+                palette,
+                template.source,
+                PathBuf::from(format!("<built-in>/{name}")),
                 target,
-            });
+                options,
+            )?;
         }
     }
 
     // Section overrides run last: they edit the shell.toml the loop just wrote.
-    if !dry_run {
+    if !options.dry_run {
         report.section_overrides = crate::section::apply_overrides(out_dir)?;
     }
 
     Ok(report)
+}
+
+fn skip(name: &String, options: &Options, claimed: &BTreeMap<String, ()>) -> bool {
+    (!options.only.is_empty() && !options.only.contains(name)) || claimed.contains_key(name)
+}
+
+fn write_rendered(
+    report: &mut Report,
+    palette: &Palette,
+    source: &str,
+    template: PathBuf,
+    target: PathBuf,
+    options: &Options,
+) -> Result<(), IoError> {
+    let rendered = template::render(source, palette);
+    if !options.dry_run {
+        write_atomic(&target, &rendered)?;
+    }
+    report.outcomes.push(Outcome::Rendered { template, target });
+    Ok(())
 }
 
 /// Templates in a directory, sorted so a run is reproducible.
@@ -175,7 +234,15 @@ mod tests {
         let out = dir.path().join("out");
         write(&templates.join("app.conf.tpl"), "bg={{ background }}");
 
-        let report = render_theme(&palette(), &[templates], &out, false, &[]).expect("render");
+        let report = render_theme(
+            &palette(),
+            &out,
+            &Options {
+                template_dirs: vec![templates],
+                ..Default::default()
+            },
+        )
+        .expect("render");
 
         assert_eq!(
             std::fs::read_to_string(out.join("app.conf")).expect("read"),
@@ -192,7 +259,15 @@ mod tests {
         write(&templates.join("app.conf.tpl"), "generated");
         write(&out.join("app.conf"), "hand written");
 
-        let report = render_theme(&palette(), &[templates], &out, false, &[]).expect("render");
+        let report = render_theme(
+            &palette(),
+            &out,
+            &Options {
+                template_dirs: vec![templates],
+                ..Default::default()
+            },
+        )
+        .expect("render");
 
         assert_eq!(
             std::fs::read_to_string(out.join("app.conf")).expect("read"),
@@ -211,7 +286,15 @@ mod tests {
         write(&user.join("app.conf.tpl"), "from user");
         write(&builtin.join("app.conf.tpl"), "from builtin");
 
-        render_theme(&palette(), &[user, builtin], &out, false, &[]).expect("render");
+        render_theme(
+            &palette(),
+            &out,
+            &Options {
+                template_dirs: vec![user, builtin],
+                ..Default::default()
+            },
+        )
+        .expect("render");
 
         assert_eq!(
             std::fs::read_to_string(out.join("app.conf")).expect("read"),
@@ -226,7 +309,16 @@ mod tests {
         let out = dir.path().join("out");
         write(&templates.join("app.conf.tpl"), "bg={{ background }}");
 
-        let report = render_theme(&palette(), &[templates], &out, true, &[]).expect("render");
+        let report = render_theme(
+            &palette(),
+            &out,
+            &Options {
+                template_dirs: vec![templates],
+                dry_run: true,
+                ..Default::default()
+            },
+        )
+        .expect("render");
 
         assert_eq!(report.rendered().count(), 1);
         assert!(!out.join("app.conf").exists());
@@ -237,10 +329,11 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let report = render_theme(
             &palette(),
-            &[dir.path().join("absent")],
             &dir.path().join("out"),
-            false,
-            &[],
+            &Options {
+                template_dirs: vec![dir.path().join("absent")],
+                ..Default::default()
+            },
         )
         .expect("render");
         assert_eq!(report.outcomes.len(), 0);

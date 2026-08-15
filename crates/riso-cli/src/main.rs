@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use riso_core::apply::{apply, copy_tree, Parts, Request};
 use riso_core::palette::Warning;
 use riso_core::reload::ProcessExecutor;
-use riso_core::theme::{load_palette, render_theme, Outcome};
+use riso_core::theme::{load_palette, render_theme, Options as RenderOptions, Outcome};
 
 #[derive(Parser)]
 #[command(name = "riso", version, about = "Modular ricing framework")]
@@ -33,6 +33,9 @@ enum Command {
         /// Do not notify the running desktop
         #[arg(long)]
         no_reload: bool,
+        /// Ignore the templates compiled into riso
+        #[arg(long)]
+        no_builtin: bool,
     },
     /// Print a theme's palette as resolved key/value pairs
     Palette {
@@ -54,6 +57,9 @@ enum Command {
         /// Report what would be written without writing it
         #[arg(long)]
         dry_run: bool,
+        /// Ignore the templates compiled into riso
+        #[arg(long)]
+        no_builtin: bool,
     },
 }
 
@@ -86,6 +92,7 @@ fn run(cli: Cli) -> Result<(), String> {
             template_dirs,
             state,
             no_reload,
+            no_builtin,
         } => {
             let state_dir = match state {
                 Some(dir) => dir,
@@ -99,6 +106,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 background_dirs: Vec::new(),
                 hooks: Vec::new(),
                 parts: Parts::default(),
+                builtin_templates: !no_builtin,
                 skip_reload: no_reload,
             };
 
@@ -127,6 +135,7 @@ fn run(cli: Cli) -> Result<(), String> {
             out,
             template_dirs,
             dry_run,
+            no_builtin,
         } => {
             let (palette, warnings) = load_palette(&theme).map_err(|e| e.to_string())?;
             report_warnings(&warnings);
@@ -135,8 +144,17 @@ fn run(cli: Cli) -> Result<(), String> {
                 copy_tree(&theme, &out).map_err(|e| format!("copying the theme: {e}"))?;
             }
 
-            let report = render_theme(&palette, &template_dirs, &out, dry_run, &[])
-                .map_err(|e| e.to_string())?;
+            let report = render_theme(
+                &palette,
+                &out,
+                &RenderOptions {
+                    template_dirs,
+                    dry_run,
+                    builtin: !no_builtin,
+                    ..Default::default()
+                },
+            )
+            .map_err(|e| e.to_string())?;
 
             for outcome in &report.outcomes {
                 match outcome {

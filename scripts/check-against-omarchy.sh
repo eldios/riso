@@ -53,7 +53,7 @@ for theme_dir in "$OMARCHY"/themes/*/; do
   # Subject: riso.
   actual="$WORK/$theme/riso"
   "$RISO" render --theme "$theme_dir" --out "$actual" \
-    --templates "$OMARCHY/default/themed" >/dev/null 2>&1
+    --templates "$OMARCHY/default/themed" --no-builtin >/dev/null 2>&1
 
   if diff -r -q "$staged" "$actual" >"$WORK/$theme.diff" 2>&1; then
     identical=$((identical + 1))

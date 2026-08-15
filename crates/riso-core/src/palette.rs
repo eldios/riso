@@ -207,6 +207,7 @@ impl Palette {
 
         self.resolve_mode(has_light_mode_file);
         self.set("theme_type", self.get("mode").unwrap_or_default());
+        self.resolve_fonts();
 
         for (key, value) in &self.values {
             if value.is_empty() {
@@ -291,6 +292,24 @@ impl Palette {
         let end = Rgb::from_hex(towards).expect("constant is valid hex");
         let amount = parse_amount(amount).expect("constant is a valid amount");
         self.set(key, mix(start, end, amount).to_hex());
+    }
+
+    /// Give the typography keys a value when the theme states none.
+    ///
+    /// Upstream keeps fonts outside the theme and applies them by rewriting
+    /// the user's config files. Treating them as tokens makes them data like
+    /// everything else; the defaults are fontconfig aliases, so they resolve
+    /// on any system.
+    fn resolve_fonts(&mut self) {
+        for (key, fallback) in [
+            ("font_mono", "monospace"),
+            ("font_ui", "sans-serif"),
+            ("font_size", "10"),
+        ] {
+            if self.non_empty(key).is_none() {
+                self.set(key, fallback.to_owned());
+            }
+        }
     }
 
     fn resolve_mode(&mut self, has_light_mode_file: bool) {

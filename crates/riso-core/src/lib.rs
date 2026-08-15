@@ -7,6 +7,7 @@
 pub mod apply;
 pub mod atomic;
 pub mod background;
+pub mod builtin;
 pub mod color;
 pub mod error;
 pub mod gradient;

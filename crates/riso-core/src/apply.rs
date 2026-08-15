@@ -12,7 +12,7 @@ use crate::background;
 use crate::error::IoError;
 use crate::palette::Warning;
 use crate::reload::{base64, notify_omarchy_shell, Executor, ReloadError};
-use crate::theme::{load_palette, render_theme, Report};
+use crate::theme::{load_palette, render_theme, Options as RenderOptions, Report};
 
 const PALETTE_FILE: &str = "colors.toml";
 const SHELL_FILE: &str = "shell.toml";
@@ -88,6 +88,9 @@ pub struct Request {
     pub hooks: Vec<String>,
     /// Which parts of the theme to apply.
     pub parts: Parts,
+    /// Fall back to the templates compiled into the binary for outputs that
+    /// no template directory claims.
+    pub builtin_templates: bool,
     /// Skip telling the running desktop about the change.
     pub skip_reload: bool,
 }
@@ -210,10 +213,13 @@ fn build(
     let (palette, warnings) = load_palette(staging)?;
     let report = render_theme(
         &palette,
-        &request.template_dirs,
         staging,
-        false,
-        &request.parts.only,
+        &RenderOptions {
+            template_dirs: request.template_dirs.clone(),
+            only: request.parts.only.clone(),
+            dry_run: false,
+            builtin: request.builtin_templates,
+        },
     )?;
 
     Ok((report, warnings))
@@ -389,6 +395,9 @@ mod tests {
             background_dirs: Vec::new(),
             hooks: Vec::new(),
             parts: Parts::default(),
+            // The fixture asserts on its own templates, so the built-ins would
+            // only add noise.
+            builtin_templates: false,
             skip_reload: false,
         }
     }
