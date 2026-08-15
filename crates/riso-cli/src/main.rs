@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 
 use riso_core::apply::{apply, copy_tree, Parts, Request};
+use riso_core::desktop::Desktop;
 use riso_core::palette::Warning;
 use riso_core::reload::ProcessExecutor;
 use riso_core::theme::{load_palette, render_theme, Options as RenderOptions, Outcome};
@@ -36,6 +37,10 @@ enum Command {
         /// Ignore the templates compiled into riso
         #[arg(long)]
         no_builtin: bool,
+        /// Which desktop to notify: omarchy, hyprland, sway, niri, none.
+        /// Detected from the session when not given.
+        #[arg(long)]
+        desktop: Option<String>,
     },
     /// Print a theme's palette as resolved key/value pairs
     Palette {
@@ -93,10 +98,17 @@ fn run(cli: Cli) -> Result<(), String> {
             state,
             no_reload,
             no_builtin,
+            desktop,
         } => {
             let state_dir = match state {
                 Some(dir) => dir,
                 None => default_state_dir()?,
+            };
+            let desktop = match desktop {
+                Some(name) => {
+                    Desktop::from_name(&name).ok_or_else(|| format!("unknown desktop '{name}'"))?
+                }
+                None => Desktop::detect(),
             };
             let request = Request {
                 name,
@@ -107,6 +119,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 hooks: Vec::new(),
                 parts: Parts::default(),
                 builtin_templates: !no_builtin,
+                desktop,
                 skip_reload: no_reload,
             };
 
@@ -114,12 +127,16 @@ fn run(cli: Cli) -> Result<(), String> {
             report_warnings(&applied.warnings);
 
             println!(
-                "applied {} to {} ({} rendered, {} from the theme)",
+                "applied {} to {} ({} rendered, {} from the theme, desktop: {})",
                 applied.name,
                 applied.target.display(),
                 applied.report.rendered().count(),
-                applied.report.kept().count()
+                applied.report.kept().count(),
+                desktop.name()
             );
+            if let Some(background) = &applied.background {
+                println!("background {}", background.display());
+            }
             Ok(())
         }
         Command::Palette { theme } => {

@@ -9,6 +9,7 @@ pub mod atomic;
 pub mod background;
 pub mod builtin;
 pub mod color;
+pub mod desktop;
 pub mod error;
 pub mod gradient;
 pub mod palette;
@@ -19,6 +20,7 @@ pub mod theme;
 
 pub use apply::{apply, Applied, Request};
 pub use color::Rgb;
+pub use desktop::{Desktop, Payload};
 pub use palette::{Palette, Warning};
 pub use reload::{Executor, ProcessExecutor, RecordingExecutor};
 pub use theme::{render_theme, Outcome, Report};

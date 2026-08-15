@@ -9,9 +9,10 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::background;
+use crate::desktop::{Desktop, Payload};
 use crate::error::IoError;
 use crate::palette::Warning;
-use crate::reload::{base64, notify_omarchy_shell, Executor, ReloadError};
+use crate::reload::{Executor, ReloadError};
 use crate::theme::{load_palette, render_theme, Options as RenderOptions, Report};
 
 const PALETTE_FILE: &str = "colors.toml";
@@ -91,6 +92,8 @@ pub struct Request {
     /// Fall back to the templates compiled into the binary for outputs that
     /// no template directory claims.
     pub builtin_templates: bool,
+    /// Which desktop to notify once the theme is in place.
+    pub desktop: Desktop,
     /// Skip telling the running desktop about the change.
     pub skip_reload: bool,
 }
@@ -176,7 +179,7 @@ pub fn apply(request: &Request, exec: &dyn Executor) -> Result<Applied, ApplyErr
     }
 
     if !request.skip_reload {
-        notify(&target, exec)?;
+        notify(request.desktop, &target, exec)?;
     }
 
     if request.parts.hooks {
@@ -304,17 +307,15 @@ fn swap(staging: &Path, target: &Path) -> Result<(), IoError> {
     }
 }
 
-/// Hand the new palette to a running desktop.
-fn notify(target: &Path, exec: &dyn Executor) -> Result<(), ApplyError> {
-    let encode = |name: &str| {
-        std::fs::read(target.join(name))
-            .ok()
-            .map(|bytes| base64(&bytes))
+/// Hand the new theme to the running desktop, in whatever form it wants it.
+fn notify(desktop: Desktop, target: &Path, exec: &dyn Executor) -> Result<(), ApplyError> {
+    let read = |name: &str| std::fs::read(target.join(name)).ok();
+    let payload = Payload {
+        colors: read(PALETTE_FILE),
+        shell: read(SHELL_FILE),
     };
-    let colors = encode(PALETTE_FILE);
-    let shell = encode(SHELL_FILE);
 
-    notify_omarchy_shell(exec, colors.as_deref(), shell.as_deref())?;
+    desktop.reload(exec, &payload)?;
     Ok(())
 }
 
@@ -398,6 +399,7 @@ mod tests {
             // The fixture asserts on its own templates, so the built-ins would
             // only add noise.
             builtin_templates: false,
+            desktop: Desktop::Omarchy,
             skip_reload: false,
         }
     }
