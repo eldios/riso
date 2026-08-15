@@ -30,6 +30,13 @@ const DANGEROUS_WORDS: &[&str] = &[
     "plugin",
 ];
 
+/// Directories that belong to the repository rather than to the theme.
+///
+/// A clone carries git's sample hooks, which are executable and full of the
+/// very directives this looks for. Scanning them would refuse every theme
+/// installed from git, which is all of them.
+const REPOSITORY_DIRS: &[&str] = &[".git", ".github", ".hg", ".svn"];
+
 /// Extensions whose contents are not text worth scanning.
 const BINARY_EXTENSIONS: &[&str] = &[
     "png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "ttf", "otf", "woff", "woff2", "zip", "gz",
@@ -173,6 +180,10 @@ fn walk(
             continue;
         }
         if metadata.is_dir() {
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            if REPOSITORY_DIRS.contains(&name.as_ref()) {
+                continue;
+            }
             walk(root, &path, limits, total, findings)?;
             continue;
         }
@@ -417,6 +428,24 @@ mod tests {
         assert!(found
             .iter()
             .any(|f| matches!(f, Finding::FileTooLarge { .. })));
+    }
+
+    #[test]
+    fn ignores_the_repository_metadata_a_clone_brings_along() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = theme(dir.path());
+        // What `git clone` leaves behind: executable hooks full of directives.
+        let hooks = path.join(".git/hooks");
+        std::fs::create_dir_all(&hooks).expect("mkdir");
+        let hook = hooks.join("pre-commit.sample");
+        std::fs::write(&hook, "#!/bin/sh\nexec git diff-index --check\n").expect("write");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        }
+
+        assert_eq!(findings(&path), vec![], "a cloned theme must still pass");
     }
 
     #[test]
