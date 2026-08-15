@@ -69,11 +69,15 @@ pub fn load_palette(theme_dir: &Path) -> Result<(Palette, Vec<Warning>), IoError
 ///
 /// `template_dirs` are searched in order and the first one to claim an output
 /// name wins, so caller-supplied directories should come before built-in ones.
+///
+/// `only` restricts rendering to those output names; empty renders every
+/// template.
 pub fn render_theme(
     palette: &Palette,
     template_dirs: &[PathBuf],
     out_dir: &Path,
     dry_run: bool,
+    only: &[String],
 ) -> Result<Report, IoError> {
     let mut report = Report::default();
     let mut claimed: BTreeMap<String, ()> = BTreeMap::new();
@@ -83,6 +87,9 @@ pub fn render_theme(
             let Some(name) = output_name(&path) else {
                 continue;
             };
+            if !only.is_empty() && !only.contains(&name) {
+                continue;
+            }
             if claimed.contains_key(&name) {
                 continue;
             }
@@ -168,7 +175,7 @@ mod tests {
         let out = dir.path().join("out");
         write(&templates.join("app.conf.tpl"), "bg={{ background }}");
 
-        let report = render_theme(&palette(), &[templates], &out, false).expect("render");
+        let report = render_theme(&palette(), &[templates], &out, false, &[]).expect("render");
 
         assert_eq!(
             std::fs::read_to_string(out.join("app.conf")).expect("read"),
@@ -185,7 +192,7 @@ mod tests {
         write(&templates.join("app.conf.tpl"), "generated");
         write(&out.join("app.conf"), "hand written");
 
-        let report = render_theme(&palette(), &[templates], &out, false).expect("render");
+        let report = render_theme(&palette(), &[templates], &out, false, &[]).expect("render");
 
         assert_eq!(
             std::fs::read_to_string(out.join("app.conf")).expect("read"),
@@ -204,7 +211,7 @@ mod tests {
         write(&user.join("app.conf.tpl"), "from user");
         write(&builtin.join("app.conf.tpl"), "from builtin");
 
-        render_theme(&palette(), &[user, builtin], &out, false).expect("render");
+        render_theme(&palette(), &[user, builtin], &out, false, &[]).expect("render");
 
         assert_eq!(
             std::fs::read_to_string(out.join("app.conf")).expect("read"),
@@ -219,7 +226,7 @@ mod tests {
         let out = dir.path().join("out");
         write(&templates.join("app.conf.tpl"), "bg={{ background }}");
 
-        let report = render_theme(&palette(), &[templates], &out, true).expect("render");
+        let report = render_theme(&palette(), &[templates], &out, true, &[]).expect("render");
 
         assert_eq!(report.rendered().count(), 1);
         assert!(!out.join("app.conf").exists());
@@ -233,6 +240,7 @@ mod tests {
             &[dir.path().join("absent")],
             &dir.path().join("out"),
             false,
+            &[],
         )
         .expect("render");
         assert_eq!(report.outcomes.len(), 0);

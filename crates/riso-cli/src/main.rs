@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use riso_core::apply::{apply, copy_tree, Request};
+use riso_core::apply::{apply, copy_tree, Parts, Request};
 use riso_core::palette::Warning;
 use riso_core::reload::ProcessExecutor;
 use riso_core::theme::{load_palette, render_theme, Outcome};
@@ -96,6 +96,9 @@ fn run(cli: Cli) -> Result<(), String> {
                 theme_dirs,
                 template_dirs,
                 state_dir,
+                background_dirs: Vec::new(),
+                hooks: Vec::new(),
+                parts: Parts::default(),
                 skip_reload: no_reload,
             };
 
@@ -132,8 +135,8 @@ fn run(cli: Cli) -> Result<(), String> {
                 copy_tree(&theme, &out).map_err(|e| format!("copying the theme: {e}"))?;
             }
 
-            let report =
-                render_theme(&palette, &template_dirs, &out, dry_run).map_err(|e| e.to_string())?;
+            let report = render_theme(&palette, &template_dirs, &out, dry_run, &[])
+                .map_err(|e| e.to_string())?;
 
             for outcome in &report.outcomes {
                 match outcome {

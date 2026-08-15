@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::background;
 use crate::error::IoError;
 use crate::palette::Warning;
 use crate::reload::{base64, notify_omarchy_shell, Executor, ReloadError};
@@ -18,6 +19,8 @@ const SHELL_FILE: &str = "shell.toml";
 const CURRENT_DIR: &str = "current";
 const THEME_DIR: &str = "theme";
 const THEME_NAME_FILE: &str = "theme.name";
+const BACKGROUNDS_DIR: &str = "backgrounds";
+const BACKGROUND_LINK: &str = "background";
 
 #[derive(Debug, Error)]
 pub enum ApplyError {
@@ -27,6 +30,45 @@ pub enum ApplyError {
     Io(#[from] IoError),
     #[error(transparent)]
     Reload(#[from] ReloadError),
+}
+
+/// Which parts of a theme an apply touches.
+///
+/// A theme is not one thing: config files, a wallpaper, and the retinting of
+/// applications that read neither. Applying them separately is what lets a
+/// wallpaper change without disturbing a hand-tuned palette.
+#[derive(Debug, Clone)]
+pub struct Parts {
+    /// Render the theme's config files.
+    pub files: bool,
+    /// Pick and link the wallpaper.
+    pub background: bool,
+    /// Run the per-application retint hooks.
+    pub hooks: bool,
+    /// Restrict rendering to these output names, e.g. `ghostty.conf`.
+    /// Empty means every template. Naming any of them keeps the files already
+    /// in place, so a partial apply adds to the current theme instead of
+    /// replacing it.
+    pub only: Vec<String>,
+}
+
+impl Default for Parts {
+    fn default() -> Self {
+        Self {
+            files: true,
+            background: true,
+            hooks: true,
+            only: Vec::new(),
+        }
+    }
+}
+
+impl Parts {
+    /// True when the apply is narrower than the whole theme, and so must build
+    /// on what is already there rather than start from nothing.
+    fn is_partial(&self) -> bool {
+        !self.only.is_empty()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -39,17 +81,28 @@ pub struct Request {
     pub template_dirs: Vec<PathBuf>,
     /// Where the generated theme lives, typically ~/.local/state/omarchy.
     pub state_dir: PathBuf,
+    /// Extra directories to look in for this theme's wallpapers.
+    pub background_dirs: Vec<PathBuf>,
+    /// Commands run after the swap to retint applications that read neither
+    /// the palette nor the generated files.
+    pub hooks: Vec<String>,
+    /// Which parts of the theme to apply.
+    pub parts: Parts,
     /// Skip telling the running desktop about the change.
     pub skip_reload: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Applied {
     pub name: String,
     pub sources: Vec<PathBuf>,
     pub target: PathBuf,
     pub report: Report,
     pub warnings: Vec<Warning>,
+    /// The wallpaper now in use, when one was chosen.
+    pub background: Option<PathBuf>,
+    /// Hooks that were run, in the order they were run.
+    pub hooks_run: Vec<String>,
 }
 
 /// Fold a name the way a menu entry would spell it into a directory name.
@@ -80,7 +133,7 @@ fn locate(name: &str, theme_dirs: &[PathBuf]) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Render `request.name` and swap it in as the current theme.
+/// Apply `request.name`, in whole or in the parts the request names.
 pub fn apply(request: &Request, exec: &dyn Executor) -> Result<Applied, ApplyError> {
     let name = normalize_name(&request.name);
     let sources = locate(&name, &request.theme_dirs);
@@ -90,52 +143,126 @@ pub fn apply(request: &Request, exec: &dyn Executor) -> Result<Applied, ApplyErr
 
     let current = request.state_dir.join(CURRENT_DIR);
     let target = current.join(THEME_DIR);
-    // The pid keeps two concurrent applies from sharing a staging directory;
-    // the rename at the end is what actually decides which one wins.
-    let staging = current.join(format!("next-theme.{}", std::process::id()));
 
-    let outcome = build(request, &sources, &staging);
-    if outcome.is_err() {
-        let _ = std::fs::remove_dir_all(&staging);
+    let mut applied = Applied {
+        name: name.clone(),
+        sources: sources.clone(),
+        target: target.clone(),
+        ..Default::default()
+    };
+
+    if request.parts.files {
+        // The pid keeps two concurrent applies from sharing a staging
+        // directory; the rename at the end decides which one wins.
+        let staging = current.join(format!("next-theme.{}", std::process::id()));
+
+        let outcome = build(request, &sources, &staging, &target);
+        if outcome.is_err() {
+            let _ = std::fs::remove_dir_all(&staging);
+        }
+        let (report, warnings) = outcome?;
+        applied.report = report;
+        applied.warnings = warnings;
+
+        swap(&staging, &target)?;
+        write_file(&current.join(THEME_NAME_FILE), &format!("{name}\n"))?;
     }
-    let (report, warnings) = outcome?;
 
-    swap(&staging, &target)?;
-    write_file(&current.join(THEME_NAME_FILE), &format!("{name}\n"))?;
+    if request.parts.background {
+        applied.background = set_background(request, &name, &target, &current)?;
+    }
 
     if !request.skip_reload {
         notify(&target, exec)?;
     }
 
-    Ok(Applied {
-        name,
-        sources,
-        target,
-        report,
-        warnings,
-    })
+    if request.parts.hooks {
+        applied.hooks_run = run_hooks(exec, &request.hooks);
+    }
+
+    Ok(applied)
 }
 
 /// Populate a staging directory: theme files first, then whatever the
 /// templates add. Copying first is what gives a hand-written file priority.
+///
+/// A partial apply seeds the staging directory from the theme already in
+/// place, so files it does not name survive.
 fn build(
     request: &Request,
     sources: &[PathBuf],
     staging: &Path,
+    target: &Path,
 ) -> Result<(Report, Vec<Warning>), ApplyError> {
     if staging.exists() {
         std::fs::remove_dir_all(staging).map_err(|e| IoError::Write(staging.into(), e))?;
     }
     std::fs::create_dir_all(staging).map_err(|e| IoError::Write(staging.into(), e))?;
 
+    if request.parts.is_partial() && target.is_dir() {
+        copy_tree(target, staging)?;
+    }
+
     for source in sources {
         copy_tree(source, staging)?;
     }
 
     let (palette, warnings) = load_palette(staging)?;
-    let report = render_theme(&palette, &request.template_dirs, staging, false)?;
+    let report = render_theme(
+        &palette,
+        &request.template_dirs,
+        staging,
+        false,
+        &request.parts.only,
+    )?;
 
     Ok((report, warnings))
+}
+
+/// Choose the theme's next wallpaper and point the current-background link at
+/// it. A theme with no images leaves the link untouched.
+fn set_background(
+    request: &Request,
+    name: &str,
+    target: &Path,
+    current: &Path,
+) -> Result<Option<PathBuf>, ApplyError> {
+    // User directories are named after the theme; the theme's own images sit
+    // beside its config files.
+    let mut dirs: Vec<PathBuf> = request
+        .background_dirs
+        .iter()
+        .map(|dir| dir.join(name))
+        .collect();
+    dirs.push(target.join(BACKGROUNDS_DIR));
+
+    let images = background::candidates(&dirs);
+    let link_path = current.join(BACKGROUND_LINK);
+    let showing = background::current(&link_path);
+
+    let Some(chosen) = background::next(&images, showing.as_deref()) else {
+        return Ok(None);
+    };
+    background::link(&link_path, &chosen)?;
+    Ok(Some(chosen))
+}
+
+/// Run the retint hooks for applications that read neither the palette nor the
+/// generated files.
+///
+/// A hook that cannot start is skipped rather than fatal: the theme is already
+/// on disk, and losing it because one editor is absent would be worse.
+fn run_hooks(exec: &dyn Executor, hooks: &[String]) -> Vec<String> {
+    hooks
+        .iter()
+        .filter(|hook| !hook.trim().is_empty())
+        .filter_map(|hook| {
+            let mut words = hook.split_whitespace();
+            let program = words.next()?;
+            let args: Vec<String> = words.map(str::to_owned).collect();
+            exec.run(program, &args).ok().map(|()| hook.clone())
+        })
+        .collect()
 }
 
 /// Replace `target` with `staging`.
@@ -259,6 +386,9 @@ mod tests {
             theme_dirs: vec![f.system.clone(), f.user.clone()],
             template_dirs: vec![f.templates.clone()],
             state_dir: f.state.clone(),
+            background_dirs: Vec::new(),
+            hooks: Vec::new(),
+            parts: Parts::default(),
             skip_reload: false,
         }
     }
