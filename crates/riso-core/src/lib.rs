@@ -9,6 +9,7 @@ pub mod color;
 pub mod error;
 pub mod gradient;
 pub mod palette;
+pub mod section;
 pub mod template;
 pub mod theme;
 

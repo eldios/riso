@@ -28,6 +28,8 @@ pub enum Outcome {
 pub struct Report {
     pub outcomes: Vec<Outcome>,
     pub warnings: Vec<Warning>,
+    /// Section override files that were folded into `shell.toml`.
+    pub section_overrides: Vec<PathBuf>,
 }
 
 impl Report {
@@ -100,6 +102,11 @@ pub fn render_theme(
                 target,
             });
         }
+    }
+
+    // Section overrides run last: they edit the shell.toml the loop just wrote.
+    if !dry_run {
+        report.section_overrides = crate::section::apply_overrides(out_dir)?;
     }
 
     Ok(report)
