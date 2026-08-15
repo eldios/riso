@@ -155,10 +155,15 @@ pub fn discover(plugin_dirs: &[PathBuf]) -> Result<Vec<Plugin>, PluginError> {
 }
 
 /// Render a plugin's files and reload whatever reads them.
+///
+/// `store` records what was at each target beforehand, so uninstalling can
+/// put it back. A plugin writes into config that belongs to someone else, so
+/// this is where losing it would be easiest.
 pub fn apply(
     plugin: &Plugin,
     palette: &Palette,
     home: &Path,
+    store: Option<&mut crate::snapshot::Store>,
     exec: &dyn Executor,
 ) -> Result<Applied, PluginError> {
     let mut applied = Applied {
@@ -173,12 +178,16 @@ pub fn apply(
         }
     }
 
+    let mut store = store;
     for render in &plugin.manifest.render {
         let source_path = plugin.dir.join(&render.template);
         let source = std::fs::read_to_string(&source_path)
             .map_err(|e| IoError::Read(source_path.clone(), e))?;
 
         let target = expand_home(&render.target, home);
+        if let Some(store) = store.as_deref_mut() {
+            store.capture(&target)?;
+        }
         write_atomic(&target, &template::render(&source, palette))?;
         applied.written.push(target);
     }
@@ -320,7 +329,7 @@ mod tests {
 
         let plugins = discover(&[plugins]).expect("discover");
         let recorder = RecordingExecutor::default();
-        let applied = apply(&plugins[0], &palette(), &home, &recorder).expect("apply");
+        let applied = apply(&plugins[0], &palette(), &home, None, &recorder).expect("apply");
 
         assert_eq!(
             std::fs::read_to_string(home.join(".config/zed/riso.json")).expect("read"),
@@ -342,7 +351,7 @@ mod tests {
 
         let found = discover(&[plugins]).expect("discover");
         let recorder = RecordingExecutor::default();
-        let applied = apply(&found[0], &palette(), dir.path(), &recorder).expect("apply");
+        let applied = apply(&found[0], &palette(), dir.path(), None, &recorder).expect("apply");
 
         assert!(applied.skipped.is_some());
         assert!(applied.written.is_empty());

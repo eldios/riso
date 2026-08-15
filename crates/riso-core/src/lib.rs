@@ -17,6 +17,7 @@ pub mod palette;
 pub mod plugin;
 pub mod reload;
 pub mod section;
+pub mod snapshot;
 pub mod template;
 pub mod theme;
 

@@ -56,6 +56,23 @@ enum Command {
         #[command(subcommand)]
         action: PluginAction,
     },
+    /// Put back everything riso wrote over
+    Restore {
+        /// Where the generated theme lives
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+        /// Restore one path instead of everything
+        #[arg(long, value_name = "PATH")]
+        path: Option<PathBuf>,
+    },
+    /// Put everything back and forget the generated theme
+    Uninstall {
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+        /// Do it without asking
+        #[arg(long)]
+        yes: bool,
+    },
     /// Print a theme's palette as resolved key/value pairs
     Palette {
         /// Directory holding colors.toml
@@ -398,6 +415,72 @@ fn run(cli: Cli) -> Result<(), String> {
                     ),
                 }
             }
+            Ok(())
+        }
+        Command::Restore { state, path } => {
+            let state_dir = match state {
+                Some(dir) => dir,
+                None => default_state_dir()?,
+            };
+            let mut store = riso_core::snapshot::Store::open(&state_dir.join("ownership"))
+                .map_err(|e| e.to_string())?;
+
+            let done = match path {
+                Some(path) => store
+                    .restore(&path)
+                    .map_err(|e| e.to_string())?
+                    .into_iter()
+                    .collect(),
+                None => store.restore_all().map_err(|e| e.to_string())?,
+            };
+
+            if done.is_empty() {
+                eprintln!("riso: nothing to put back");
+            }
+            for outcome in done {
+                match outcome {
+                    riso_core::snapshot::Restored::Contents(path) => {
+                        println!("restored {}", path.display())
+                    }
+                    riso_core::snapshot::Restored::Removed(path) => {
+                        println!("removed {}", path.display())
+                    }
+                }
+            }
+            Ok(())
+        }
+        Command::Uninstall { state, yes } => {
+            let state_dir = match state {
+                Some(dir) => dir,
+                None => default_state_dir()?,
+            };
+            let mut store = riso_core::snapshot::Store::open(&state_dir.join("ownership"))
+                .map_err(|e| e.to_string())?;
+
+            let owned = store.targets().count();
+            if !yes {
+                // Saying what will happen is the point: this is the command
+                // someone runs when they want out.
+                eprintln!(
+                    "riso: this puts back {owned} file(s) and removes {}",
+                    state_dir.display()
+                );
+                return Err("re-run with --yes to go ahead".to_owned());
+            }
+
+            for outcome in store.restore_all().map_err(|e| e.to_string())? {
+                match outcome {
+                    riso_core::snapshot::Restored::Contents(path) => {
+                        println!("restored {}", path.display())
+                    }
+                    riso_core::snapshot::Restored::Removed(path) => {
+                        println!("removed {}", path.display())
+                    }
+                }
+            }
+            std::fs::remove_dir_all(&state_dir)
+                .map_err(|e| format!("removing {}: {e}", state_dir.display()))?;
+            println!("removed {}", state_dir.display());
             Ok(())
         }
         Command::Theme { action } => run_theme(action),

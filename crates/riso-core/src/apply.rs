@@ -284,9 +284,14 @@ fn run_plugins(
     }
 
     let (palette, _) = load_palette(target)?;
+    let mut store = crate::snapshot::Store::open(&request.state_dir.join("ownership"))?;
+
     plugins
         .iter()
-        .map(|p| plugin::apply(p, &palette, &request.home, exec).map_err(ApplyError::Plugin))
+        .map(|p| {
+            plugin::apply(p, &palette, &request.home, Some(&mut store), exec)
+                .map_err(ApplyError::Plugin)
+        })
         .collect()
 }
 
