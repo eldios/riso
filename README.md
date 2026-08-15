@@ -3,57 +3,94 @@
 A modular ricing framework: a theme is data, and every config file the desktop
 reads is generated from it.
 
-Today `riso` renders [Omarchy](https://github.com/basecamp/omarchy) 4 themes.
-It reads a theme's `colors.toml`, resolves the full palette, renders the
-templates, and writes the result. Output is byte-identical to what Omarchy's
-own shell pipeline produces, so it works as a drop-in replacement for
-`omarchy-theme-set-templates` on systems where that pipeline cannot run.
+Adding support for an application does not make existing themes incomplete,
+because a theme that says nothing about it still renders through the template.
+And a theme that wants to hand-write one file still can: what it ships wins.
+
+## Install
+
+```bash
+riso theme install rose-pine                          # from the catalog
+riso theme install https://github.com/someone/x.git   # from any git repo
+riso set "Rose Pine"
+```
+
+Themes are validated before they are kept, on the client as well as in the
+catalog: installing from a git URL never passed through a catalog at all.
 
 ## Use
 
 ```
-riso palette --theme themes/tokyo-night
-riso render --theme themes/tokyo-night --out ~/.local/state/riso/theme --templates default/themed
+riso set <name>              apply a theme and tell the desktop
+riso theme list              what is installed, and what is read-only
+riso theme validate <path>   is this safe to install
+riso plugin list             what teaches riso about more applications
+riso render                  render into a directory without applying
+riso palette                 the resolved palette, key and value
+riso restore                 put back what riso wrote over
+riso uninstall --yes         put everything back and forget the state
 ```
 
-`render` copies the theme into the output directory first, then renders every
-template whose output is not already there. That ordering is what gives a theme
-the last word: a file the theme ships by hand is never replaced by a generated
-one.
+`riso(1)` has the options.
 
-Repeat `--templates` to add more template directories. Earlier directories win,
-so user templates go before built-in ones.
+## How a theme is put together
 
-`--dry-run` reports what would be written without writing it.
+Four layers decide any given file, strongest first:
 
-## Layering
+1. a file the theme ships by hand
+2. a user template directory
+3. a template directory the desktop provides
+4. the templates compiled into `riso`
 
-Four levels decide the value of any given setting, strongest last:
+Layer 4 is what makes a theme impossible to leave incomplete; layer 1 is what
+lets an author overrule the generator on the file they care about.
 
-1. the module's template, rendered from the theme's tokens
-2. the theme's tokens
-3. a file the theme hand-writes, which replaces the generated one entirely
-4. a user override
+Fonts are tokens like colours, so a theme carries its own typography rather
+than leaving it to a separate setting.
 
-A theme therefore cannot be incomplete: level 1 always produces every file.
-Adding a new template gives every existing theme support for that application
-without touching any of them.
+## Compatibility
+
+`riso` reads Omarchy themes natively and renders them byte-for-byte the way
+Omarchy's own pipeline does, verified against every theme it ships. The point
+is not to be a copy: it is that a theme written for either works on both, and
+that this claim is checked rather than asserted.
+
+```bash
+just conformance   # diff riso against Omarchy's renderer, theme by theme
+```
+
+## Extending
+
+A plugin teaches `riso` to theme an application it does not know about: a
+directory with a manifest and its templates, installed from git.
+
+```toml
+id = "eldios.zed"
+api = 1
+reload = ["zed", "--reload"]
+
+[[render]]
+template = "zed.json.tpl"
+target = "~/.config/zed/themes/riso.json"
+```
+
+Whatever was at that path first is copied aside, so `riso restore` can put it
+back byte for byte.
 
 ## Develop
 
-```
-nix develop      # toolchain plus every tool the gates need
-just             # list the tasks
-just ci          # format check, lint, tests - what CI runs
-just conformance # diff riso against the real Omarchy pipeline, per theme
+```bash
+nix develop        # toolchain plus every tool the gates need
+just ci            # format, lint, tests
+just conformance   # interoperability against upstream
 ```
 
-`just conformance` clones upstream Omarchy on first use and compares the two
-renderers across every shipped theme. It is the test that matters: the unit
-suite proves internal consistency, this one proves interoperability.
+`riso` calls `git` and `curl` at run time and nothing else; everything it
+needs is in the binary. Packaging notes are in `packaging/`.
 
 ## Status
 
-Early. The template engine, palette resolution, and file writing are done and
-verified against upstream. Theme switching, module reload, snapshots, and the
-GUI are not built yet.
+Early, and honest about it. Rendering, applying, backgrounds, themes, plugins,
+ownership tracking and validation work and are tested. Not built yet: a theme
+carousel, capture from a running desktop, and the desktops beyond Omarchy,
+Hyprland, Sway and niri.

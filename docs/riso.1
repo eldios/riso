@@ -1,0 +1,115 @@
+.TH RISO 1 "2026-08-15" "riso 0.1.0" "User Commands"
+.SH NAME
+riso \- modular ricing framework
+.SH SYNOPSIS
+.B riso
+.I command
+.RI [ options ]
+.SH DESCRIPTION
+.B riso
+renders a theme into the configuration files a desktop reads. A theme is data:
+a palette, optionally some wallpapers, and any file its author chose to write
+by hand. Everything else is generated from templates, so adding support for an
+application does not make existing themes incomplete.
+.PP
+Precedence runs from strongest to weakest: a file the theme ships, then each
+template directory in turn, then the templates built into
+.BR riso .
+A theme therefore cannot be incomplete, and a desktop that ships its own
+templates keeps its own look.
+.SH COMMANDS
+.TP
+.BI "set " name
+Render a theme, swap it in, and tell the running desktop. The name is folded
+the way a menu spells it, so
+.B "Tokyo Night"
+and
+.B tokyo-night
+are the same theme.
+.TP
+.B "theme list"
+List every theme found, marking those a package manager owns as read-only.
+.TP
+.BI "theme install " source
+Install from the catalog by name, or from any git URL. The theme is validated
+before it is kept.
+.TP
+.BI "theme validate " path
+Report anything that would make a theme unsafe to install.
+.TP
+.BI "theme remove " name
+Remove a theme
+.B riso
+installed. Themes owned by a package manager are refused.
+.TP
+.B "plugin list|install|remove"
+Manage plugins, which teach
+.B riso
+to theme applications it does not know about.
+.TP
+.BI "render " options
+Render a theme into a directory without applying it.
+.TP
+.BI "palette " options
+Print a theme's palette as resolved key and value pairs.
+.TP
+.B restore
+Put back every file
+.B riso
+wrote over.
+.TP
+.B uninstall
+Put everything back and forget the generated theme. Requires
+.BR \-\-yes .
+.SH OPTIONS
+.TP
+.BI \-\-themes " DIR"
+Theme directory. Repeat for more; a later one overlays an earlier one.
+.TP
+.BI \-\-templates " DIR"
+Template directory. Repeat for more; an earlier one takes precedence.
+.TP
+.BI \-\-plugins " DIR"
+Plugin directory. Repeat for more; a later one overrides an earlier one.
+.TP
+.BI \-\-state " DIR"
+Where the generated theme lives. Defaults to
+.I $XDG_STATE_HOME/omarchy
+or
+.IR ~/.local/state/omarchy .
+.TP
+.BI \-\-desktop " NAME"
+One of
+.BR omarchy ", " hyprland ", " sway ", " niri ", " none .
+Detected from the session when not given.
+.TP
+.B \-\-no\-reload
+Write the files without telling the desktop.
+.TP
+.B \-\-no\-builtin
+Ignore the templates compiled into
+.BR riso .
+.SH FILES
+.TP
+.I ~/.config/riso/themes
+Themes installed by the user.
+.TP
+.I ~/.config/riso/plugins
+Plugins installed by the user.
+.TP
+.I ~/.local/state/omarchy/current/theme
+The generated theme now in use.
+.TP
+.I ~/.local/state/omarchy/ownership
+What
+.B riso
+wrote over, and copies of what was there before.
+.SH EXIT STATUS
+.B riso
+exits 0 on success and 1 on failure. A theme that is missing, unsafe, or fails
+to render leaves the previous theme in place.
+.SH SEE ALSO
+.BR git (1),
+.BR curl (1)
+.SH BUGS
+Report at https://github.com/eldios/riso/issues

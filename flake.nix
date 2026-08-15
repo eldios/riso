@@ -16,6 +16,11 @@
           version = "0.1.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
+
+          nativeBuildInputs = [ pkgs.installShellFiles ];
+          postInstall = ''
+            installManPage docs/riso.1
+          '';
           meta = {
             description = "Modular ricing framework";
             homepage = "https://github.com/eldios/riso";

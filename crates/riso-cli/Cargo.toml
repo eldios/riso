@@ -8,6 +8,32 @@ license.workspace = true
 name = "riso"
 path = "src/main.rs"
 
+description = "Modular ricing framework: renders themes into the files a desktop reads"
+homepage = "https://github.com/eldios/riso"
+repository = "https://github.com/eldios/riso"
+readme = "../../README.md"
+
+# Both helpers read this metadata instead of a spec file, so the manpage and
+# licence land in the package without one.
+[package.metadata.deb]
+name = "riso"
+maintainer = "Emanuele Calo <emanuele.lele.calo@gmail.com>"
+depends = "git, curl"
+section = "utils"
+assets = [
+    ["target/release/riso", "usr/bin/", "755"],
+    ["../../docs/riso.1", "usr/share/man/man1/", "644"],
+    ["../../README.md", "usr/share/doc/riso/README.md", "644"],
+]
+
+[package.metadata.generate-rpm]
+requires = { git = "*", curl = "*" }
+assets = [
+    { source = "target/release/riso", dest = "/usr/bin/riso", mode = "755" },
+    { source = "docs/riso.1", dest = "/usr/share/man/man1/riso.1", mode = "644" },
+    { source = "README.md", dest = "/usr/share/doc/riso/README.md", mode = "644" },
+]
+
 [dependencies]
 riso-core = { path = "../riso-core" }
 clap.workspace = true

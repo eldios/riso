@@ -1,0 +1,36 @@
+# Maintainer: Emanuele Calo <emanuele.lele.calo@gmail.com>
+pkgname=riso
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Modular ricing framework: renders themes into the files a desktop reads"
+arch=('x86_64' 'aarch64')
+url="https://github.com/eldios/riso"
+license=('MIT')
+# git and curl are called at run time to install themes and plugins.
+depends=('git' 'curl')
+makedepends=('cargo')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  cargo fetch --locked
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  cargo build --release --frozen
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  cargo test --release --frozen
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 "target/release/riso" "$pkgdir/usr/bin/riso"
+  install -Dm644 "docs/riso.1" "$pkgdir/usr/share/man/man1/riso.1"
+  install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
