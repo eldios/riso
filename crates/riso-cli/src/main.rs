@@ -121,6 +121,14 @@ enum ThemeAction {
         #[arg(long)]
         name: Option<String>,
     },
+    /// Check that a theme is data and nothing else
+    Validate {
+        /// Theme directory to inspect
+        path: PathBuf,
+        /// Report findings without failing on them
+        #[arg(long)]
+        warn_only: bool,
+    },
     /// Remove a theme riso installed
     Remove {
         name: String,
@@ -314,6 +322,33 @@ fn run_theme(action: ThemeAction) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
             println!("installed {name} to {}", path.display());
+            Ok(())
+        }
+        ThemeAction::Validate { path, warn_only } => {
+            let findings = riso_core::validate::validate(&path, &Default::default())
+                .map_err(|e| e.to_string())?;
+
+            if findings.is_empty() {
+                println!("{}: clean", path.display());
+                return Ok(());
+            }
+            let fatal = findings.iter().filter(|f| f.is_fatal()).count();
+            for finding in &findings {
+                println!(
+                    "{} {}",
+                    if finding.is_fatal() {
+                        "REFUSE"
+                    } else {
+                        "warn  "
+                    },
+                    finding.describe()
+                );
+            }
+            if fatal > 0 && !warn_only {
+                return Err(format!(
+                    "{fatal} finding(s) make this theme unsafe to install"
+                ));
+            }
             Ok(())
         }
         ThemeAction::Remove { name, into } => {

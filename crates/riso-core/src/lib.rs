@@ -20,6 +20,7 @@ pub mod section;
 pub mod snapshot;
 pub mod template;
 pub mod theme;
+pub mod validate;
 
 pub use apply::{apply, Applied, Request};
 pub use color::Rgb;
