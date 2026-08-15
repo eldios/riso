@@ -12,6 +12,7 @@ use crate::background;
 use crate::desktop::{Desktop, Payload};
 use crate::error::IoError;
 use crate::palette::Warning;
+use crate::plugin;
 use crate::reload::{Executor, ReloadError};
 use crate::theme::{load_palette, render_theme, Options as RenderOptions, Report};
 
@@ -31,6 +32,8 @@ pub enum ApplyError {
     Io(#[from] IoError),
     #[error(transparent)]
     Reload(#[from] ReloadError),
+    #[error(transparent)]
+    Plugin(crate::plugin::PluginError),
 }
 
 /// Which parts of a theme an apply touches.
@@ -92,6 +95,10 @@ pub struct Request {
     /// Fall back to the templates compiled into the binary for outputs that
     /// no template directory claims.
     pub builtin_templates: bool,
+    /// Plugin directories, weakest first.
+    pub plugin_dirs: Vec<PathBuf>,
+    /// Home directory, for expanding the `~/` in plugin targets.
+    pub home: PathBuf,
     /// Which desktop to notify once the theme is in place.
     pub desktop: Desktop,
     /// Skip telling the running desktop about the change.
@@ -109,6 +116,8 @@ pub struct Applied {
     pub background: Option<PathBuf>,
     /// Hooks that were run, in the order they were run.
     pub hooks_run: Vec<String>,
+    /// What each plugin did.
+    pub plugins: Vec<plugin::Applied>,
 }
 
 /// Fold a name the way a menu entry would spell it into a directory name.
@@ -184,6 +193,7 @@ pub fn apply(request: &Request, exec: &dyn Executor) -> Result<Applied, ApplyErr
 
     if request.parts.hooks {
         applied.hooks_run = run_hooks(exec, &request.hooks);
+        applied.plugins = run_plugins(request, &target, exec)?;
     }
 
     Ok(applied)
@@ -254,6 +264,30 @@ fn set_background(
     };
     background::link(&link_path, &chosen)?;
     Ok(Some(chosen))
+}
+
+/// Render every plugin against the theme that was just applied.
+///
+/// Plugins reach applications that read neither the palette nor the generated
+/// files, so they run after the swap and read the palette from what landed.
+fn run_plugins(
+    request: &Request,
+    target: &Path,
+    exec: &dyn Executor,
+) -> Result<Vec<plugin::Applied>, ApplyError> {
+    if request.plugin_dirs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let plugins = plugin::discover(&request.plugin_dirs).map_err(ApplyError::Plugin)?;
+    if plugins.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let (palette, _) = load_palette(target)?;
+    plugins
+        .iter()
+        .map(|p| plugin::apply(p, &palette, &request.home, exec).map_err(ApplyError::Plugin))
+        .collect()
 }
 
 /// Run the retint hooks for applications that read neither the palette nor the
@@ -399,6 +433,8 @@ mod tests {
             // The fixture asserts on its own templates, so the built-ins would
             // only add noise.
             builtin_templates: false,
+            plugin_dirs: Vec::new(),
+            home: f.state.clone(),
             desktop: Desktop::Omarchy,
             skip_reload: false,
         }

@@ -14,6 +14,7 @@ pub mod desktop;
 pub mod error;
 pub mod gradient;
 pub mod palette;
+pub mod plugin;
 pub mod reload;
 pub mod section;
 pub mod template;

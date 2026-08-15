@@ -131,12 +131,15 @@ pub fn installed(theme_dirs: &[PathBuf], writable: Option<&Path>) -> Vec<Install
 /// Cloning is delegated to git rather than reimplemented: it is the one tool
 /// every system already has for this, and it handles the protocols, the
 /// authentication and the pinning.
+/// `expect` names the file that proves the clone is what was asked for:
+/// `colors.toml` for a theme, `manifest.toml` for a plugin.
 pub fn install_from_git(
     exec: &dyn Executor,
     repo: &str,
     rev: Option<&str>,
     name: &str,
     into: &Path,
+    expect: &str,
 ) -> Result<PathBuf, CatalogError> {
     let destination = into.join(name);
     if destination.exists() {
@@ -168,9 +171,9 @@ pub fn install_from_git(
         )?;
     }
 
-    // A clone that produced no palette is not a theme, and leaving it behind
-    // would make it show up in every later listing.
-    if !destination.join(PALETTE_FILE).is_file() {
+    // A clone missing that file is not what was asked for, and leaving it
+    // behind would make it show up in every later listing.
+    if !destination.join(expect).is_file() {
         let _ = std::fs::remove_dir_all(&destination);
         return Err(CatalogError::NotATheme(destination));
     }
@@ -309,6 +312,7 @@ mod tests {
             Some("v1.2.0"),
             "rose-pine",
             dir.path(),
+            PALETTE_FILE,
         );
 
         assert!(
@@ -325,6 +329,7 @@ mod tests {
             Some("v1"),
             "seeded2",
             empty.path(),
+            PALETTE_FILE,
         );
         let calls = recorder.calls();
         assert!(
@@ -343,7 +348,14 @@ mod tests {
     fn clones_shallow_when_nothing_is_pinned() {
         let dir = tempfile::tempdir().expect("tempdir");
         let recorder = RecordingExecutor::default();
-        let _ = install_from_git(&recorder, "https://x/y.git", None, "shallow", dir.path());
+        let _ = install_from_git(
+            &recorder,
+            "https://x/y.git",
+            None,
+            "shallow",
+            dir.path(),
+            PALETTE_FILE,
+        );
 
         assert!(recorder.calls()[0].contains("--depth=1"));
     }
@@ -353,7 +365,14 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let recorder = RecordingExecutor::default();
 
-        let result = install_from_git(&recorder, "https://x/y.git", None, "empty", dir.path());
+        let result = install_from_git(
+            &recorder,
+            "https://x/y.git",
+            None,
+            "empty",
+            dir.path(),
+            PALETTE_FILE,
+        );
 
         assert!(matches!(result, Err(CatalogError::NotATheme(_))));
         assert!(

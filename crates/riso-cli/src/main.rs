@@ -42,11 +42,19 @@ enum Command {
         /// Detected from the session when not given.
         #[arg(long)]
         desktop: Option<String>,
+        /// Plugin directory; repeat for more, later ones override earlier ones
+        #[arg(long = "plugins", value_name = "DIR")]
+        plugin_dirs: Vec<PathBuf>,
     },
     /// Manage installed themes
     Theme {
         #[command(subcommand)]
         action: ThemeAction,
+    },
+    /// Manage plugins, which teach riso to theme more applications
+    Plugin {
+        #[command(subcommand)]
+        action: PluginAction,
     },
     /// Print a theme's palette as resolved key/value pairs
     Palette {
@@ -105,9 +113,113 @@ enum ThemeAction {
     },
 }
 
+#[derive(Subcommand)]
+enum PluginAction {
+    /// List installed plugins
+    List {
+        #[arg(long = "plugins", value_name = "DIR")]
+        plugin_dirs: Vec<PathBuf>,
+    },
+    /// Install a plugin from a git repository
+    Install {
+        /// Git URL
+        repo: String,
+        #[arg(long, value_name = "DIR")]
+        into: Option<PathBuf>,
+        /// Install under this name instead of the one derived from the URL
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Remove an installed plugin
+    Remove {
+        name: String,
+        #[arg(long, value_name = "DIR")]
+        into: Option<PathBuf>,
+    },
+}
+
+fn run_plugin(action: PluginAction) -> Result<(), String> {
+    match action {
+        PluginAction::List { plugin_dirs } => {
+            let dirs = if plugin_dirs.is_empty() {
+                vec![user_plugin_dir()?]
+            } else {
+                plugin_dirs
+            };
+            let found = riso_core::plugin::discover(&dirs).map_err(|e| e.to_string())?;
+            if found.is_empty() {
+                eprintln!("riso: no plugins installed");
+            }
+            for plugin in found {
+                println!(
+                    "{}\t{}\t{} file(s)",
+                    plugin.manifest.id,
+                    plugin.manifest.name.as_deref().unwrap_or("-"),
+                    plugin.manifest.render.len()
+                );
+            }
+            Ok(())
+        }
+        PluginAction::Install { repo, into, name } => {
+            let into = match into {
+                Some(dir) => dir,
+                None => user_plugin_dir()?,
+            };
+            let name = name.unwrap_or_else(|| catalog::name_from_repo(&repo));
+            if !catalog::is_safe_name(&name) {
+                return Err(format!("'{name}' is not usable as a directory name"));
+            }
+            // A plugin is code: cloning it is the moment to say so.
+            eprintln!(
+                "riso: a plugin runs as code on your machine; review {repo} before enabling it"
+            );
+            let path = catalog::install_from_git(
+                &ProcessExecutor,
+                &repo,
+                None,
+                &name,
+                &into,
+                "manifest.toml",
+            )
+            .map_err(|e| e.to_string())?;
+            println!("installed {name} to {}", path.display());
+            Ok(())
+        }
+        PluginAction::Remove { name, into } => {
+            let into = match into {
+                Some(dir) => dir,
+                None => user_plugin_dir()?,
+            };
+            let path = into.join(&name);
+            if !path.join("manifest.toml").is_file() {
+                return Err(format!("nothing named '{name}' is installed"));
+            }
+            std::fs::remove_dir_all(&path)
+                .map_err(|e| format!("removing {}: {e}", path.display()))?;
+            println!("removed {}", path.display());
+            Ok(())
+        }
+    }
+}
+
 /// Where `theme install` puts things, and the first place `set` looks.
 const DEFAULT_CATALOG: &str =
     "https://raw.githubusercontent.com/eldios/riso-themes/main/index.json";
+
+fn home_dir() -> Result<PathBuf, String> {
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .map_err(|_| "HOME is not set".to_owned())
+}
+
+fn user_plugin_dir() -> Result<PathBuf, String> {
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        if !xdg.is_empty() {
+            return Ok(PathBuf::from(xdg).join("riso/plugins"));
+        }
+    }
+    Ok(home_dir()?.join(".config/riso/plugins"))
+}
 
 fn user_theme_dir() -> Result<PathBuf, String> {
     if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
@@ -174,9 +286,15 @@ fn run_theme(action: ThemeAction) -> Result<(), String> {
                 return Err(format!("'{name}' is not usable as a directory name"));
             }
 
-            let path =
-                catalog::install_from_git(&ProcessExecutor, &repo, rev.as_deref(), &name, &into)
-                    .map_err(|e| e.to_string())?;
+            let path = catalog::install_from_git(
+                &ProcessExecutor,
+                &repo,
+                rev.as_deref(),
+                &name,
+                &into,
+                "colors.toml",
+            )
+            .map_err(|e| e.to_string())?;
 
             println!("installed {name} to {}", path.display());
             Ok(())
@@ -186,7 +304,8 @@ fn run_theme(action: ThemeAction) -> Result<(), String> {
                 Some(dir) => dir,
                 None => user_theme_dir()?,
             };
-            let path = catalog::remove(&name, std::slice::from_ref(&into), &into).map_err(|e| e.to_string())?;
+            let path = catalog::remove(&name, std::slice::from_ref(&into), &into)
+                .map_err(|e| e.to_string())?;
             println!("removed {}", path.display());
             Ok(())
         }
@@ -224,6 +343,7 @@ fn run(cli: Cli) -> Result<(), String> {
             no_reload,
             no_builtin,
             desktop,
+            plugin_dirs,
         } => {
             let state_dir = match state {
                 Some(dir) => dir,
@@ -244,6 +364,12 @@ fn run(cli: Cli) -> Result<(), String> {
                 hooks: Vec::new(),
                 parts: Parts::default(),
                 builtin_templates: !no_builtin,
+                plugin_dirs: if plugin_dirs.is_empty() {
+                    vec![user_plugin_dir()?]
+                } else {
+                    plugin_dirs
+                },
+                home: home_dir()?,
                 desktop,
                 skip_reload: no_reload,
             };
@@ -262,9 +388,20 @@ fn run(cli: Cli) -> Result<(), String> {
             if let Some(background) = &applied.background {
                 println!("background {}", background.display());
             }
+            for plugin in &applied.plugins {
+                match &plugin.skipped {
+                    Some(reason) => eprintln!("riso: skipped plugin {}: {reason}", plugin.id),
+                    None => println!(
+                        "plugin {} wrote {} file(s)",
+                        plugin.id,
+                        plugin.written.len()
+                    ),
+                }
+            }
             Ok(())
         }
         Command::Theme { action } => run_theme(action),
+        Command::Plugin { action } => run_plugin(action),
         Command::Palette { theme } => {
             let (palette, warnings) = load_palette(&theme).map_err(|e| e.to_string())?;
             report_warnings(&warnings);
