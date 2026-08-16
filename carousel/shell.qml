@@ -69,8 +69,8 @@ ShellRoot {
   Process {
     id: listProc
     running: true
-    command: [Quickshell.env("RISO_CAROUSEL_LIST")
-              || Qt.resolvedUrl("list-themes.sh").toString().replace("file://", "")]
+    command: ["sh", "-c",
+              Quickshell.env("RISO_CAROUSEL_LIST") || "riso carousel-data themes"]
     stdout: StdioCollector {
       onStreamFinished: {
         const rows = []

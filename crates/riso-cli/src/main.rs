@@ -74,6 +74,27 @@ enum Command {
         #[arg(long)]
         yes: bool,
     },
+    /// Change the wallpaper: the link, and the desktop that draws it
+    Bg {
+        #[command(subcommand)]
+        action: BgAction,
+    },
+    /// Pick a theme or a background from a full-screen strip of previews.
+    /// Needs quickshell on PATH.
+    Carousel {
+        /// What to browse
+        #[arg(value_parser = ["themes", "backgrounds"], default_value = "themes")]
+        what: String,
+    },
+    /// Rows for the carousel: label, preview and value, tab-separated
+    #[command(hide = true)]
+    CarouselData {
+        #[arg(value_parser = ["themes", "backgrounds"])]
+        what: String,
+        /// Print what is current instead of the rows
+        #[arg(long)]
+        current: bool,
+    },
     /// Print a theme's palette as resolved key/value pairs
     Palette {
         /// Directory holding colors.toml
@@ -97,6 +118,39 @@ enum Command {
         /// Ignore the templates compiled into riso
         #[arg(long)]
         no_builtin: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum BgAction {
+    /// Use this image
+    Set {
+        image: PathBuf,
+        /// Where the generated theme lives
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+        /// Do not tell the running desktop
+        #[arg(long)]
+        no_reload: bool,
+    },
+    /// Advance to the current theme's next background
+    Next {
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        no_reload: bool,
+    },
+    /// Set or, with no argument, print how the wallpaper is scaled
+    Mode {
+        #[arg(value_parser = ["fill", "fit", "center", "stretch", "tile"])]
+        mode: Option<String>,
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+    },
+    /// Print the wallpaper in use and its mode
+    Get {
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
     },
 }
 
@@ -586,6 +640,9 @@ fn run(cli: Cli) -> Result<(), String> {
             println!("removed {}", state_dir.display());
             Ok(())
         }
+        Command::Bg { action } => run_bg(action),
+        Command::Carousel { what } => run_carousel(&what),
+        Command::CarouselData { what, current } => run_carousel_data(&what, current),
         Command::Theme { action } => run_theme(action),
         Command::Plugin { action } => run_plugin(action),
         Command::Palette { theme } => {
@@ -639,6 +696,186 @@ fn run(cli: Cli) -> Result<(), String> {
             Ok(())
         }
     }
+}
+
+fn state_or_default(state: Option<PathBuf>) -> Result<PathBuf, String> {
+    match state {
+        Some(dir) => Ok(dir),
+        None => default_state_dir(),
+    }
+}
+
+/// Point the current-background link at `image` and tell the desktop that
+/// draws its own wallpaper.
+fn set_background(image: &Path, state: &Path, no_reload: bool) -> Result<(), String> {
+    let image = std::fs::canonicalize(image).map_err(|e| format!("{}: {e}", image.display()))?;
+    if !image.is_file() {
+        return Err(format!("{}: not a file", image.display()));
+    }
+
+    let link = state.join("current/background");
+    riso_core::background::link(&link, &image).map_err(|e| e.to_string())?;
+
+    if !no_reload {
+        let desktop = Desktop::detect();
+        let shell_config = std::env::var_os("OMARCHY_PATH")
+            .map(|p| PathBuf::from(p).join("shell"))
+            .filter(|p| p.is_dir());
+        desktop
+            .set_background(&ProcessExecutor, &image, shell_config.as_deref())
+            .map_err(|e| e.to_string())?;
+    }
+
+    println!("background {}", image.display());
+    Ok(())
+}
+
+fn run_bg(action: BgAction) -> Result<(), String> {
+    match action {
+        BgAction::Set {
+            image,
+            state,
+            no_reload,
+        } => {
+            let state = state_or_default(state)?;
+            set_background(&image, &state, no_reload)
+        }
+        BgAction::Next { state, no_reload } => {
+            let state = state_or_default(state)?;
+            let images =
+                riso_core::background::candidates(&[state.join("current/theme/backgrounds")]);
+            let showing = riso_core::background::current(&state.join("current/background"));
+            let Some(chosen) = riso_core::background::next(&images, showing.as_deref()) else {
+                return Err("the current theme ships no backgrounds".to_owned());
+            };
+            set_background(&chosen, &state, no_reload)
+        }
+        BgAction::Mode { mode, state } => {
+            let state = state_or_default(state)?;
+            let path = state.join("current/background.mode");
+            match mode {
+                Some(mode) => {
+                    riso_core::atomic::write_atomic(&path, &format!("{mode}\n"))
+                        .map_err(|e| e.to_string())?;
+                    println!("mode {mode}");
+                }
+                None => {
+                    let mode = std::fs::read_to_string(&path).unwrap_or_default();
+                    let mode = mode.trim();
+                    println!("{}", if mode.is_empty() { "fill" } else { mode });
+                }
+            }
+            Ok(())
+        }
+        BgAction::Get { state } => {
+            let state = state_or_default(state)?;
+            match riso_core::background::current(&state.join("current/background")) {
+                Some(path) => println!("{}", path.display()),
+                None => println!("none"),
+            }
+            let mode =
+                std::fs::read_to_string(state.join("current/background.mode")).unwrap_or_default();
+            let mode = mode.trim();
+            println!("mode {}", if mode.is_empty() { "fill" } else { mode });
+            Ok(())
+        }
+    }
+}
+
+/// The carousel ships inside the binary and runs on quickshell: the QML is
+/// written out where the session can read it, and every hook points back at
+/// this same executable.
+const CAROUSEL_QML: &str = include_str!("../../../carousel/shell.qml");
+
+fn run_carousel(what: &str) -> Result<(), String> {
+    let exe = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .to_string_lossy()
+        .into_owned();
+
+    let base = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("riso-carousel");
+    riso_core::atomic::write_atomic(&base.join("shell.qml"), CAROUSEL_QML)
+        .map_err(|e| e.to_string())?;
+
+    let (apply_env, default_apply, current) = match what {
+        "backgrounds" => (
+            "RISO_CAROUSEL_APPLY_BG",
+            format!("{exe} bg set"),
+            "readlink -f \"${XDG_STATE_HOME:-$HOME/.local/state}/riso/current/background\""
+                .to_owned(),
+        ),
+        _ => (
+            "RISO_CAROUSEL_APPLY",
+            format!("{exe} set"),
+            "cat \"${XDG_STATE_HOME:-$HOME/.local/state}/riso/current/theme.name\"".to_owned(),
+        ),
+    };
+    let apply = std::env::var(apply_env).unwrap_or(default_apply);
+
+    use std::os::unix::process::CommandExt;
+    let error = std::process::Command::new("quickshell")
+        .arg("-n")
+        .arg("-p")
+        .arg(&base)
+        .env("RISO_CAROUSEL_LIST", format!("{exe} carousel-data {what}"))
+        .env("RISO_CAROUSEL_APPLY", apply)
+        .env("RISO_CAROUSEL_CURRENT", current)
+        .exec();
+    Err(format!("could not run quickshell: {error}"))
+}
+
+fn run_carousel_data(what: &str, current: bool) -> Result<(), String> {
+    let state = default_state_dir()?;
+
+    if what == "backgrounds" {
+        if current {
+            if let Some(path) = riso_core::background::current(&state.join("current/background")) {
+                println!("{}", path.display());
+            }
+            return Ok(());
+        }
+        for image in riso_core::background::candidates(&[state.join("current/theme/backgrounds")]) {
+            let label = image
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            println!("{label}\t{}\t{}", image.display(), image.display());
+        }
+        return Ok(());
+    }
+
+    if current {
+        let name = std::fs::read_to_string(state.join("current/theme.name")).unwrap_or_default();
+        let name = name.trim();
+        if !name.is_empty() {
+            println!("{name}");
+        }
+        return Ok(());
+    }
+    let dirs = catalog::default_theme_dirs();
+    for theme in catalog::installed(&dirs, None) {
+        let preview = theme_preview(&theme.path)
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        println!("{}\t{preview}\t{}", theme.name, theme.name);
+    }
+    Ok(())
+}
+
+/// The file a theme names preview.*, else its first background.
+fn theme_preview(theme: &Path) -> Option<PathBuf> {
+    for name in ["preview.png", "preview.jpg", "preview.jpeg", "preview.webp"] {
+        let candidate = theme.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    riso_core::background::candidates(&[theme.join("backgrounds")])
+        .into_iter()
+        .next()
 }
 
 /// Warnings go to stderr so they never contaminate piped output.

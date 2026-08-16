@@ -123,6 +123,47 @@ impl Desktop {
             Self::None => Ok(()),
         }
     }
+
+    /// Hand the desktop a new wallpaper.
+    ///
+    /// Only Omarchy draws its own: a bare compositor leaves wallpapers to
+    /// whatever daemon the user runs, which is not riso's to guess.
+    pub fn set_background(
+        self,
+        exec: &dyn Executor,
+        image: &std::path::Path,
+        shell_config: Option<&std::path::Path>,
+    ) -> Result<(), ReloadError> {
+        if self != Self::Omarchy {
+            return Ok(());
+        }
+        let image = image.to_string_lossy().into_owned();
+        match shell_config {
+            Some(dir) => exec.run(
+                "qs",
+                &[
+                    "ipc".to_owned(),
+                    "-n".to_owned(),
+                    "-p".to_owned(),
+                    dir.to_string_lossy().into_owned(),
+                    "call".to_owned(),
+                    "--".to_owned(),
+                    "background".to_owned(),
+                    "set".to_owned(),
+                    image,
+                ],
+            ),
+            None => exec.run(
+                "omarchy-shell",
+                &[
+                    "-q".to_owned(),
+                    "background".to_owned(),
+                    "set".to_owned(),
+                    image,
+                ],
+            ),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -241,6 +282,24 @@ mod tests {
                 .expect("reload");
             assert_eq!(recorder.calls(), [expected]);
         }
+    }
+
+    #[test]
+    fn hands_omarchy_the_wallpaper_and_nobody_else() {
+        let recorder = RecordingExecutor::default();
+        Desktop::Omarchy
+            .set_background(&recorder, std::path::Path::new("/b/img.png"), None)
+            .expect("set");
+        assert_eq!(
+            recorder.calls(),
+            ["omarchy-shell -q background set /b/img.png"]
+        );
+
+        let recorder = RecordingExecutor::default();
+        Desktop::Hyprland
+            .set_background(&recorder, std::path::Path::new("/b/img.png"), None)
+            .expect("set");
+        assert!(recorder.calls().is_empty());
     }
 
     #[test]

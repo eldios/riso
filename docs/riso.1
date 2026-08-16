@@ -53,6 +53,20 @@ Render a theme into a directory without applying it.
 .BI "palette " options
 Print a theme's palette as resolved key and value pairs.
 .TP
+.B "bg set|next|mode|get"
+Change the wallpaper: point the current-background link at an image, cycle
+the theme's set, or state how it is scaled
+.RB ( fill ", " fit ", " center ", " stretch ", " tile ).
+The desktop that draws its own wallpaper is told; a bare compositor is not,
+because the daemon that paints for it is not
+.BR riso 's
+to guess.
+.TP
+.B "carousel [themes|backgrounds]"
+A full-screen strip of previews to pick from. Runs on
+.BR quickshell ,
+which must be on PATH; everything else ships inside the binary.
+.TP
 .B restore
 Put back every file
 .B riso

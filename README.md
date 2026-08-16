@@ -37,6 +37,8 @@ riso set "Rose Pine"
 ```
 riso set <name>              apply a theme and tell the desktop
 riso theme list              what is installed, and what is read-only
+riso bg set|next|mode|get    the wallpaper: which image, and how it scales
+riso carousel                pick a theme or background from previews
 riso theme validate <path>   is this safe to install
 riso plugin list             what teaches riso about more applications
 riso render                  render into a directory without applying
@@ -133,5 +135,5 @@ just conformance   # the interoperability check
 ## Status
 
 Early, and honest about it. Rendering, applying, backgrounds, themes, plugins,
-ownership tracking and validation work and are tested. Not built yet: a theme
-carousel, capture from a running desktop, and more desktops.
+ownership tracking, validation and the carousel work and are tested. Not
+built yet: capture from a running desktop, and more desktops.
