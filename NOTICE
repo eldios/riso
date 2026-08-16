@@ -1,31 +1,22 @@
-# Acknowledgements
+# Theme format compatibility
 
-riso would not exist in this shape without Omarchy.
+riso reads and writes the theme format Omarchy uses. That is a deliberate
+choice, not an accident of history: a theme is work, and asking authors to
+write it twice for two tools would be a waste of theirs.
 
-The theme format riso reads, the template dialect it renders, and the layering
-that lets a hand-written file win over a generated one were all worked out in
-Omarchy first. riso implements that design rather than inventing its own,
-because a theme should not have to be written twice.
+What riso implements from that format:
 
-Concretely, the following come from Omarchy:
-
-- the `colors.toml` palette format, its semantic key names, and the cascade
-  that resolves a short palette into a full one
+- the `colors.toml` palette, its semantic key names, and the cascade that
+  resolves a short palette into a full one
 - the template dialect: `{{ key }}`, `{{ key_strip }}`, `{{ key_rgb }}`,
   `{{ mix a b 30% }}`, and the gradient helpers
-- the arrangement where a theme ships files that take precedence over
-  generated ones, and where user templates take precedence over built-in ones
-- the shape of several built-in templates, which follow Omarchy's for the
-  applications both projects theme
+- the layering where files a theme ships take precedence over generated ones
 
-riso's conformance suite renders every theme Omarchy ships and compares the
-result byte for byte against Omarchy's own renderer. That suite exists so the
-compatibility stays real rather than claimed, and it is only possible because
-Omarchy's implementation is there to check against.
+riso's implementation is its own. The conformance suite renders every theme
+Omarchy publishes and compares the output byte for byte against Omarchy's
+renderer, so the compatibility is measured rather than claimed. Where riso goes
+further, it does so without breaking that: fonts are theme tokens, themes are
+validated before they are installed, and nothing is tied to one distribution.
 
-Omarchy is MIT licensed, Copyright (c) David Heinemeier Hansson, and is the
-work of a large number of contributors.
-
-  https://github.com/basecamp/omarchy
-
-Thanks to all of them.
+Omarchy is MIT licensed and is at https://github.com/basecamp/omarchy.
+Credit to that project and its contributors for the format riso builds on.

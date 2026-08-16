@@ -1,7 +1,12 @@
 # riso
 
-A modular ricing framework: a theme is data, and every config file the desktop
-reads is generated from it.
+An independent, community-driven ricing framework. A theme is data, and every
+config file the desktop reads is generated from it.
+
+riso reads Omarchy themes natively and renders them identically, so a theme
+written for either works on both. Beyond that it goes its own way: any distro,
+any Wayland desktop, themes and extensions from any git repository, and a
+binary that carries what it needs instead of a tree of scripts.
 
 Adding support for an application does not make existing themes incomplete,
 because a theme that says nothing about it still renders through the template.
@@ -88,12 +93,13 @@ just conformance   # interoperability against upstream
 `riso` calls `git` and `curl` at run time and nothing else; everything it
 needs is in the binary. Packaging notes are in `packaging/`.
 
-## Thanks
+## Where riso came from
 
-The theme format, the template dialect and the layering that makes an
-incomplete theme impossible were worked out in
-[Omarchy](https://github.com/basecamp/omarchy) first. `riso` implements that
-design rather than inventing a second one. See [NOTICE](NOTICE).
+The theme format riso speaks was designed in
+[Omarchy](https://github.com/basecamp/omarchy), and riso implements it rather
+than inventing a second one that would split themes into two incompatible
+worlds. Credit for the format goes there; the implementation, the direction and
+the governance are riso's own. See [NOTICE](NOTICE).
 
 ## Status
 
