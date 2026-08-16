@@ -63,6 +63,9 @@
 
             # task runner
             just
+
+            # dry-run the GitHub workflow locally (needs docker at run time)
+            act
           ];
 
           RUST_BACKTRACE = "1";
