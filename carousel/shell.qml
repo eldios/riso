@@ -208,11 +208,39 @@ ShellRoot {
           readonly property real bottomRight: width - win.skew
           readonly property real bottomLeft: 0
 
+          // The shadow is its own blurred polygon behind the slice, so the
+          // image, the border and the shadow each keep their own geometry.
+          Shape {
+            anchors.fill: parent
+            z: -1
+            antialiasing: true
+            preferredRendererType: Shape.CurveRenderer
+            layer.enabled: true
+            layer.smooth: true
+            layer.effect: MultiEffect {
+              blurEnabled: true
+              blur: 0.5
+              blurMax: 16
+            }
+            transform: Translate { y: 5 }
+            ShapePath {
+              fillColor: "#38000000"
+              strokeColor: "transparent"
+              startX: item.topLeft; startY: 0
+              PathLine { x: item.topRight; y: 0 }
+              PathLine { x: item.bottomRight; y: item.height }
+              PathLine { x: item.bottomLeft; y: item.height }
+              PathLine { x: item.topLeft; y: 0 }
+            }
+          }
+
           Item {
             id: maskShape
             anchors.fill: parent
             visible: false
             layer.enabled: true
+            layer.samples: 4
+            layer.smooth: true
 
             Shape {
               anchors.fill: parent
@@ -234,11 +262,15 @@ ShellRoot {
             anchors.fill: parent
             layer.enabled: true
             layer.smooth: true
+            layer.samples: 4
+            // Mask alone, nothing else in this effect: a shadow here would
+            // pad the render target and slide the mask off the polygon the
+            // border is drawn on.
             layer.effect: MultiEffect {
               maskEnabled: true
               maskSource: maskShape
-              maskThresholdMin: 0.3
-              maskSpreadAtMin: 0.3
+              maskThresholdMin: 0.5
+              maskSpreadAtMin: 0.18
             }
 
             Image {
@@ -255,6 +287,26 @@ ShellRoot {
               color: "#101318"
               opacity: item.selected ? 0 : 0.42
               Behavior on opacity { NumberAnimation { duration: 150 } }
+            }
+          }
+
+          // A hairline of silver drawn on the same polygon: it cleans the
+          // slanted cut to the eye and frames every slice alike.
+          Shape {
+            anchors.fill: parent
+            antialiasing: true
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+              fillColor: "transparent"
+              strokeColor: item.selected ? "#dfe3e7" : "#b5cfd4d9"
+              // Centred on the cut: thick enough to cover the whole mask
+              // transition band on both sides.
+              strokeWidth: item.selected ? 4 : 2.5
+              startX: item.topLeft; startY: 0
+              PathLine { x: item.topRight; y: 0 }
+              PathLine { x: item.bottomRight; y: item.height }
+              PathLine { x: item.bottomLeft; y: item.height }
+              PathLine { x: item.topLeft; y: 0 }
             }
           }
 
