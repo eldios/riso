@@ -102,8 +102,9 @@ runs twice.
 ## Compatibility
 
 `riso` also reads themes written for [Omarchy](https://github.com/basecamp/omarchy),
-and renders them identically: the conformance suite checks every theme that
-project publishes, byte for byte. A theme written for either works on both. See
+and renders them identically: the conformance suite resolves every palette that
+project publishes byte for byte against its pipeline, and renders its templates
+to the same bytes. A theme written for either works on both. See
 [NOTICE](NOTICE).
 
 ## Develop

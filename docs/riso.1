@@ -64,7 +64,11 @@ Put everything back and forget the generated theme. Requires
 .SH OPTIONS
 .TP
 .BI \-\-themes " DIR"
-Theme directory. Repeat for more; a later one overlays an earlier one.
+Theme directory. Repeat for more; a later one overlays an earlier one. When
+not given,
+.B riso
+searches its default path: see
+.BR THEMES .
 .TP
 .BI \-\-templates " DIR"
 Template directory. Repeat for more; an earlier one takes precedence.
@@ -74,9 +78,9 @@ Plugin directory. Repeat for more; a later one overrides an earlier one.
 .TP
 .BI \-\-state " DIR"
 Where the generated theme lives. Defaults to
-.I $XDG_STATE_HOME/omarchy
+.I $XDG_STATE_HOME/riso
 or
-.IR ~/.local/state/omarchy .
+.IR ~/.local/state/riso .
 .TP
 .BI \-\-desktop " NAME"
 One of
@@ -89,6 +93,31 @@ Write the files without telling the desktop.
 .B \-\-no\-builtin
 Ignore the templates compiled into
 .BR riso .
+.SH THEMES
+Without
+.BR \-\-themes ,
+themes are looked up on a search path, weakest first:
+.IR /usr/share/riso/themes ,
+.IR /etc/riso/themes ,
+the directories named by
+.BR RISO_THEMES ,
+.IR $XDG_DATA_HOME/riso/themes ,
+and
+.IR ~/.config/riso/themes .
+A theme found later shadows one of the same name found earlier, so a user's
+copy always wins over what a package shipped.
+.PP
+When the whole path turns up nothing, the theme compiled into
+.B riso
+is written to the user directory as an ordinary editable theme, so applying a
+theme never depends on having installed one first.
+.SH ENVIRONMENT
+.TP
+.B RISO_THEMES
+Colon-separated list of extra theme directories. This is how a distribution or
+a session points
+.B riso
+at the themes it ships.
 .SH FILES
 .TP
 .I ~/.config/riso/themes
@@ -97,10 +126,10 @@ Themes installed by the user.
 .I ~/.config/riso/plugins
 Plugins installed by the user.
 .TP
-.I ~/.local/state/omarchy/current/theme
+.I ~/.local/state/riso/current/theme
 The generated theme now in use.
 .TP
-.I ~/.local/state/omarchy/ownership
+.I ~/.local/state/riso/ownership
 What
 .B riso
 wrote over, and copies of what was there before.

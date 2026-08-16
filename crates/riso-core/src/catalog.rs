@@ -26,6 +26,8 @@ pub enum CatalogError {
     NotInstalled(String),
     #[error("'{0}' does not look like a theme: no colors.toml")]
     NotATheme(PathBuf),
+    #[error("'{0}' was installed by a package manager and is read-only to riso")]
+    ReadOnly(PathBuf),
     #[error(transparent)]
     Io(#[from] IoError),
     #[error(transparent)]
@@ -214,10 +216,17 @@ pub fn install_from_git(
     }
     args.push(repo.to_owned());
     args.push(destination.to_string_lossy().into_owned());
-    exec.run("git", &args)?;
+
+    // capture, not run: a git failure must fail the install. A checkout that
+    // failed quietly would leave the tip installed where the catalog pinned a
+    // revision, which is the one substitution this function exists to prevent.
+    if let Err(error) = exec.capture("git", &args) {
+        let _ = std::fs::remove_dir_all(&destination);
+        return Err(error.into());
+    }
 
     if let Some(rev) = rev {
-        exec.run(
+        let checkout = exec.capture(
             "git",
             &[
                 "-C".to_owned(),
@@ -226,7 +235,11 @@ pub fn install_from_git(
                 "--quiet".to_owned(),
                 rev.to_owned(),
             ],
-        )?;
+        );
+        if let Err(error) = checkout {
+            let _ = std::fs::remove_dir_all(&destination);
+            return Err(error.into());
+        }
     }
 
     // A clone missing that file is not what was asked for, and leaving it
@@ -252,7 +265,7 @@ pub fn remove(
         .ok_or_else(|| CatalogError::NotInstalled(name.to_owned()))?;
 
     if !target.removable {
-        return Err(CatalogError::NotATheme(target.path.clone()));
+        return Err(CatalogError::ReadOnly(target.path.clone()));
     }
     std::fs::remove_dir_all(&target.path).map_err(|e| IoError::Write(target.path.clone(), e))?;
     Ok(target.path.clone())
@@ -476,6 +489,46 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_checkout_fails_the_install_and_keeps_nothing() {
+        /// Clones succeed, checkouts fail: the shape of a bad pinned revision.
+        struct BadRevExecutor;
+        impl crate::reload::Executor for BadRevExecutor {
+            fn run(&self, _: &str, _: &[String]) -> Result<(), crate::reload::ReloadError> {
+                Ok(())
+            }
+            fn capture(
+                &self,
+                program: &str,
+                args: &[String],
+            ) -> Result<String, crate::reload::ReloadError> {
+                if args.iter().any(|a| a == "checkout") {
+                    return Err(crate::reload::ReloadError::Failed(
+                        program.to_owned(),
+                        "pathspec 'v9.9.9' did not match".to_owned(),
+                    ));
+                }
+                Ok(String::new())
+            }
+        }
+
+        let empty = tempfile::tempdir().expect("tempdir");
+        let result = install_from_git(
+            &BadRevExecutor,
+            "https://x/y.git",
+            Some("v9.9.9"),
+            "pinned",
+            empty.path(),
+            PALETTE_FILE,
+        );
+
+        assert!(matches!(result, Err(CatalogError::Fetch(_))));
+        assert!(
+            !empty.path().join("pinned").exists(),
+            "a tip left behind by a failed checkout is a silent substitution"
+        );
+    }
+
+    #[test]
     fn removes_only_what_riso_installed() {
         let dir = tempfile::tempdir().expect("tempdir");
         let user = dir.path().join("user");
@@ -489,7 +542,7 @@ mod tests {
 
         assert!(matches!(
             remove("shipped", &dirs, &user),
-            Err(CatalogError::NotATheme(_))
+            Err(CatalogError::ReadOnly(_))
         ));
         assert!(matches!(
             remove("absent", &dirs, &user),

@@ -338,6 +338,26 @@ fn run_theme(action: ThemeAction) -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
 
+            // The same gate the catalog runs, because this theme may never
+            // have passed through one: a clone straight from a git URL is
+            // exactly the case the client-side check exists for.
+            let findings = riso_core::validate::validate(&path, &Default::default())
+                .map_err(|e| e.to_string())?;
+            let fatal = findings.iter().filter(|f| f.is_fatal()).count();
+            for finding in &findings {
+                eprintln!(
+                    "riso: {} {}",
+                    if finding.is_fatal() { "REFUSE" } else { "warn" },
+                    finding.describe()
+                );
+            }
+            if fatal > 0 {
+                let _ = std::fs::remove_dir_all(&path);
+                return Err(format!(
+                    "'{name}' is not just data: {fatal} finding(s) make it unsafe, nothing was installed"
+                ));
+            }
+
             println!("installed {name} to {}", path.display());
             Ok(())
         }

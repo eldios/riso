@@ -5,9 +5,9 @@
 //! such a theme with one command is a way to distribute software, so this is
 //! the gate that keeps a theme to being a palette and some files.
 //!
-//! It runs in CI and again on the client at install time. Trusting the server
-//! is not an option: installing straight from a git URL never passed through
-//! any catalog at all.
+//! It is meant to run in a catalog's CI, and it runs on the client at install
+//! time. Trusting the server is not an option: installing straight from a git
+//! URL never passed through any catalog at all.
 
 use std::path::{Path, PathBuf};
 

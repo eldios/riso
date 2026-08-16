@@ -35,6 +35,8 @@ pub enum PluginError {
     Id(PathBuf, String),
     #[error("{0}: target '{1}' must be an absolute path or start with ~/")]
     Target(PathBuf, String),
+    #[error("{0}: template '{1}' must be a relative path inside the plugin")]
+    Template(PathBuf, String),
     #[error(transparent)]
     Io(#[from] IoError),
     #[error(transparent)]
@@ -90,6 +92,12 @@ impl Manifest {
         for render in &manifest.render {
             if !is_safe_target(&render.target) {
                 return Err(PluginError::Target(at.to_path_buf(), render.target.clone()));
+            }
+            if !is_safe_template(&render.template) {
+                return Err(PluginError::Template(
+                    at.to_path_buf(),
+                    render.template.clone(),
+                ));
             }
         }
         Ok(manifest)
@@ -207,10 +215,25 @@ pub fn expand_home(path: &str, home: &Path) -> PathBuf {
     }
 }
 
+/// No path component may be `..`: checked per component, so a file name that
+/// merely contains two dots stays legal.
+fn climbs(path: &str) -> bool {
+    path.split('/').any(|component| component == "..")
+}
+
 /// A target must be somewhere nameable, not a relative path whose meaning
 /// depends on where riso happened to be run from.
 fn is_safe_target(target: &str) -> bool {
-    (target.starts_with('/') || target.starts_with("~/")) && !target.contains("..")
+    (target.starts_with('/') || target.starts_with("~/")) && !climbs(target)
+}
+
+/// A template is read from the plugin's own directory and may not reach out
+/// of it: the target is validated, so its source has to be too.
+fn is_safe_template(template: &str) -> bool {
+    !template.is_empty()
+        && !template.starts_with('/')
+        && !template.starts_with("~/")
+        && !climbs(template)
 }
 
 fn on_path(program: &str, _home: &Path) -> bool {
@@ -288,6 +311,31 @@ mod tests {
                 "{target} should be refused"
             );
         }
+    }
+
+    #[test]
+    fn refuses_a_template_that_reaches_out_of_the_plugin() {
+        for template in [
+            "../secrets.tpl",
+            "/etc/passwd",
+            "~/x.tpl",
+            "a/../../x.tpl",
+            "",
+        ] {
+            let error = Manifest::parse(
+                &format!(
+                    "id = \"x\"\napi = 1\n[[render]]\ntemplate = \"{template}\"\ntarget = \"~/.config/x\"\n"
+                ),
+                Path::new("/t/m.toml"),
+            );
+            assert!(
+                matches!(error, Err(PluginError::Template(_, _))),
+                "{template} should be refused"
+            );
+        }
+        // Two dots inside a name are not a climb.
+        assert!(is_safe_template("sub/foo..bar.tpl"));
+        assert!(is_safe_target("~/.config/foo..bar.conf"));
     }
 
     #[test]

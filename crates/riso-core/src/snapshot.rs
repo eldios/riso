@@ -143,8 +143,16 @@ impl Store {
     }
 
     fn persist(&self) -> Result<(), IoError> {
-        let raw = serde_json::to_string_pretty(&self.registry).unwrap_or_default();
-        write_atomic(&self.root.join(REGISTRY_FILE), &raw)
+        let path = self.root.join(REGISTRY_FILE);
+        // A serialization failure must not write: an empty registry would
+        // silently forget every backup this store exists to remember.
+        let raw = serde_json::to_string_pretty(&self.registry).map_err(|e| {
+            IoError::Write(
+                path.clone(),
+                std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+            )
+        })?;
+        write_atomic(&path, &raw)
     }
 
     /// A backup name derived from the full path, so two files with the same

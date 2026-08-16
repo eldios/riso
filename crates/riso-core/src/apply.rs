@@ -183,7 +183,8 @@ pub fn apply(request: &Request, exec: &dyn Executor) -> Result<Applied, ApplyErr
         applied.warnings = warnings;
 
         swap(&staging, &target)?;
-        write_file(&current.join(THEME_NAME_FILE), &format!("{name}\n"))?;
+        crate::atomic::write_atomic(&current.join(THEME_NAME_FILE), &format!("{name}\n"))?;
+        sweep_stale_staging(&current);
     }
 
     if request.parts.background {
@@ -294,13 +295,22 @@ fn run_plugins(
     let (palette, _) = load_palette(target)?;
     let mut store = crate::snapshot::Store::open(&request.state_dir.join("ownership"))?;
 
-    plugins
+    // One broken plugin does not silence the others: the theme is already on
+    // disk by now, so each failure is reported on its own plugin and the rest
+    // still run, the same tolerance the hooks get.
+    Ok(plugins
         .iter()
-        .map(|p| {
-            plugin::apply(p, &palette, &request.home, Some(&mut store), exec)
-                .map_err(ApplyError::Plugin)
-        })
-        .collect()
+        .map(
+            |p| match plugin::apply(p, &palette, &request.home, Some(&mut store), exec) {
+                Ok(applied) => applied,
+                Err(error) => plugin::Applied {
+                    id: p.manifest.id.clone(),
+                    skipped: Some(error.to_string()),
+                    ..Default::default()
+                },
+            },
+        )
+        .collect())
 }
 
 /// Run the retint hooks for applications that read neither the palette nor the
@@ -372,11 +382,26 @@ fn notify(
     Ok(())
 }
 
-fn write_file(path: &Path, contents: &str) -> Result<(), IoError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| IoError::Write(parent.into(), e))?;
+/// Remove staging directories a crashed apply left behind.
+///
+/// Each carries the pid that made it; one whose process is gone belongs to
+/// nobody. A live pid's directory is left alone, so a concurrent apply is
+/// never disturbed. Best effort: a leftover is clutter, not a failure.
+fn sweep_stale_staging(current: &Path) {
+    let Ok(entries) = std::fs::read_dir(current) else {
+        return;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let stale = ["next-theme.", "theme.previous."]
+            .iter()
+            .find_map(|prefix| name.strip_prefix(prefix))
+            .and_then(|pid| pid.parse::<u32>().ok())
+            .is_some_and(|pid| !Path::new(&format!("/proc/{pid}")).exists());
+        if stale {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
     }
-    std::fs::write(path, contents).map_err(|e| IoError::Write(path.into(), e))
 }
 
 /// Copy `from` into `to`, overwriting files that already exist.
