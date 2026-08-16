@@ -91,27 +91,6 @@ impl Executor for RecordingExecutor {
     }
 }
 
-/// Hand the palette to a running Omarchy shell over its IPC socket.
-///
-/// The payloads are base64 so they survive an argument list, which is how the
-/// shell's `applyTheme` expects them. A shell that is not running simply makes
-/// the command fail, and that is not an error worth stopping an apply for.
-pub fn notify_omarchy_shell(
-    exec: &dyn Executor,
-    colors: Option<&str>,
-    shell: Option<&str>,
-) -> Result<(), ReloadError> {
-    exec.run(
-        "omarchy-shell",
-        &[
-            "shell".to_owned(),
-            "applyTheme".to_owned(),
-            colors.unwrap_or_default().to_owned(),
-            shell.unwrap_or_default().to_owned(),
-        ],
-    )
-}
-
 /// Minimal base64, so a payload can be passed as one argument.
 pub fn base64(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -135,23 +114,6 @@ pub fn base64(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn records_the_ipc_call_without_running_it() {
-        let recorder = RecordingExecutor::default();
-        notify_omarchy_shell(&recorder, Some("Y29sb3Jz"), Some("c2hlbGw=")).expect("notify");
-        assert_eq!(
-            recorder.calls(),
-            ["omarchy-shell shell applyTheme Y29sb3Jz c2hlbGw="]
-        );
-    }
-
-    #[test]
-    fn passes_empty_payloads_as_empty_arguments() {
-        let recorder = RecordingExecutor::default();
-        notify_omarchy_shell(&recorder, None, None).expect("notify");
-        assert_eq!(recorder.calls(), ["omarchy-shell shell applyTheme  "]);
-    }
 
     // Vectors from RFC 4648 section 10.
     #[test]

@@ -375,14 +375,17 @@ fn main() -> ExitCode {
 }
 
 /// Where generated theme state lives, honouring XDG before falling back.
+///
+/// A desktop that expects the generated theme somewhere else is told with
+/// `--state`; the default is riso's own directory.
 fn default_state_dir() -> Result<PathBuf, String> {
     if let Ok(xdg) = std::env::var("XDG_STATE_HOME") {
         if !xdg.is_empty() {
-            return Ok(PathBuf::from(xdg).join("omarchy"));
+            return Ok(PathBuf::from(xdg).join("riso"));
         }
     }
     let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_owned())?;
-    Ok(PathBuf::from(home).join(".local/state/omarchy"))
+    Ok(PathBuf::from(home).join(".local/state/riso"))
 }
 
 fn run(cli: Cli) -> Result<(), String> {

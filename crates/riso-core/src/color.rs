@@ -1,4 +1,4 @@
-//! Color values and the blending arithmetic the Omarchy template dialect uses.
+//! Color values and the blending arithmetic the template dialect uses.
 //!
 //! The arithmetic here mirrors `bin/omarchy-theme-color` byte for byte,
 //! including its half-up rounding, so a rendered file is identical to the one

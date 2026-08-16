@@ -1,4 +1,4 @@
-//! The Omarchy template dialect.
+//! The template dialect.
 //!
 //! A template is a plain file where `{{ ... }}` tokens are replaced. It is not
 //! Jinja: functions take positional arguments separated by spaces, there is no
