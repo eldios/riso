@@ -40,6 +40,10 @@ pub const TEMPLATES: &[Builtin] = &[
         source: include_str!("../templates/chromium.theme.tpl"),
     },
     Builtin {
+        name: "dms.json",
+        source: include_str!("../templates/dms.json.tpl"),
+    },
+    Builtin {
         name: "foot.ini",
         source: include_str!("../templates/foot.ini.tpl"),
     },

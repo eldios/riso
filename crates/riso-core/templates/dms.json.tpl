@@ -1,0 +1,23 @@
+{
+  "name": "riso",
+  "primary": "{{ accent }}",
+  "primaryText": "{{ background }}",
+  "primaryContainer": "{{ selection }}",
+  "secondary": "{{ magenta }}",
+  "surfaceTint": "{{ accent }}",
+  "surface": "{{ background }}",
+  "surfaceText": "{{ foreground }}",
+  "surfaceVariant": "{{ lighter_background }}",
+  "surfaceVariantText": "{{ light_foreground }}",
+  "surfaceContainerLowest": "{{ darker_background }}",
+  "surfaceContainerLow": "{{ dark_background }}",
+  "surfaceContainer": "{{ mix background foreground 6% }}",
+  "surfaceContainerHigh": "{{ mix background foreground 11% }}",
+  "surfaceContainerHighest": "{{ mix background foreground 16% }}",
+  "background": "{{ background }}",
+  "backgroundText": "{{ foreground }}",
+  "outline": "{{ muted }}",
+  "error": "{{ red }}",
+  "warning": "{{ yellow }}",
+  "info": "{{ blue }}"
+}
