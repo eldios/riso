@@ -59,26 +59,30 @@ ShellRoot {
     busy = true
     const applyCmd = Quickshell.env("RISO_CAROUSEL_APPLY") || "riso set"
     applyProc.command = ["sh", "-c", applyCmd + " \"$1\"", "riso-carousel",
-                         themes[selectedIndex].name]
+                         themes[selectedIndex].value]
     applyProc.running = true
   }
 
   // name<TAB>preview per line, from the sibling script.
+  // What to list, what is current, and what a selection runs all come from
+  // the launcher: the same strip serves themes and backgrounds alike.
   Process {
     id: listProc
     running: true
-    command: [Qt.resolvedUrl("list-themes.sh").toString().replace("file://", "")]
+    command: [Quickshell.env("RISO_CAROUSEL_LIST")
+              || Qt.resolvedUrl("list-themes.sh").toString().replace("file://", "")]
     stdout: StdioCollector {
       onStreamFinished: {
         const rows = []
         for (const line of text.split("\n")) {
           if (!line.trim()) continue
           const cells = line.split("\t")
-          rows.push({ name: cells[0], preview: cells[1] || "" })
+          rows.push({ name: cells[0], preview: cells[1] || "",
+                      value: cells[2] || cells[0] })
         }
         root.themes = rows
         for (let i = 0; i < rows.length; i++) {
-          if (rows[i].name === root.activeTheme) { root.selectedIndex = i; break }
+          if (rows[i].value === root.activeTheme) { root.selectedIndex = i; break }
         }
       }
     }
@@ -88,12 +92,14 @@ ShellRoot {
     id: currentProc
     running: true
     command: ["sh", "-c",
-      "cat \"${XDG_STATE_HOME:-$HOME/.local/state}/riso/current/theme.name\" 2>/dev/null"]
+      (Quickshell.env("RISO_CAROUSEL_CURRENT")
+       || "cat \"${XDG_STATE_HOME:-$HOME/.local/state}/riso/current/theme.name\"")
+      + " 2>/dev/null"]
     stdout: StdioCollector {
       onStreamFinished: {
         root.activeTheme = text.trim()
         for (let i = 0; i < root.themes.length; i++) {
-          if (root.themes[i].name === root.activeTheme) { root.selectedIndex = i; break }
+          if (root.themes[i].value === root.activeTheme) { root.selectedIndex = i; break }
         }
       }
     }
@@ -339,7 +345,7 @@ ShellRoot {
         }
         Text {
           visible: root.themes.length > 0
-                   && root.themes[root.selectedIndex].name === root.activeTheme
+                   && root.themes[root.selectedIndex].value === root.activeTheme
           anchors.verticalCenter: parent.verticalCenter
           text: "● current"
           color: "#9fbcd8"

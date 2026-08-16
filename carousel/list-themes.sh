@@ -20,5 +20,5 @@ find_preview() {
 }
 
 riso theme list | while IFS=$'\t' read -r name path _; do
-  printf '%s\t%s\n' "$name" "$(find_preview "$path")"
+  printf '%s\t%s\t%s\n' "$name" "$(find_preview "$path")" "$name"
 done
