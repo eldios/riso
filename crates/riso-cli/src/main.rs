@@ -121,6 +121,10 @@ enum ThemeAction {
         /// Install under this name instead of the one derived from the source
         #[arg(long)]
         name: Option<String>,
+        /// Keep a theme the safety check would refuse. The findings still
+        /// print; accepting them is on you.
+        #[arg(long)]
+        trust: bool,
     },
     /// Check that a theme is data and nothing else
     Validate {
@@ -300,6 +304,7 @@ fn run_theme(action: ThemeAction) -> Result<(), String> {
             into,
             catalog: index_url,
             name,
+            trust,
         } => {
             let into = match into {
                 Some(dir) => dir,
@@ -351,11 +356,14 @@ fn run_theme(action: ThemeAction) -> Result<(), String> {
                     finding.describe()
                 );
             }
-            if fatal > 0 {
+            if fatal > 0 && !trust {
                 let _ = std::fs::remove_dir_all(&path);
                 return Err(format!(
-                    "'{name}' is not just data: {fatal} finding(s) make it unsafe, nothing was installed"
+                    "'{name}' is not just data: {fatal} finding(s) make it unsafe, nothing was installed (--trust overrides)"
                 ));
+            }
+            if fatal > 0 {
+                eprintln!("riso: kept on your say-so: --trust accepted {fatal} finding(s)");
             }
 
             println!("installed {name} to {}", path.display());

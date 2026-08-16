@@ -254,13 +254,14 @@ fn scan(root: &Path, path: &Path, findings: &mut Vec<Finding>) -> Result<(), IoE
 }
 
 /// The first dangerous word appearing as a whole token on the line.
+///
+/// Case-sensitive on purpose: the directives are lowercase in every format
+/// that has them, and a capitalized "Include" is data, a highlight group in
+/// a colorscheme being the case that taught us.
 fn dangerous_word(line: &str) -> Option<String> {
     line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
-        .find(|token| {
-            let lowered = token.to_ascii_lowercase();
-            DANGEROUS_WORDS.contains(&lowered.as_str())
-        })
-        .map(|token| token.to_ascii_lowercase())
+        .find(|token| DANGEROUS_WORDS.contains(token))
+        .map(|token| token.to_owned())
 }
 
 /// A path that climbs out of the theme, or reaches into the home directory.
@@ -356,6 +357,19 @@ mod tests {
         std::fs::write(path.join("app.conf"), "executive_summary = blue\n").expect("write");
 
         assert_eq!(findings(&path), vec![], "whole tokens only");
+    }
+
+    #[test]
+    fn a_capitalized_word_in_data_is_not_a_directive() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = theme(dir.path());
+        std::fs::write(
+            path.join("neovim.lua"),
+            "hl(0, \"Include\", { fg = colors.bright_red })\n",
+        )
+        .expect("write");
+
+        assert_eq!(findings(&path), vec![], "directives are lowercase");
     }
 
     #[test]
