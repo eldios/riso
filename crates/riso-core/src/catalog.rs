@@ -94,6 +94,64 @@ pub struct Installed {
     pub removable: bool,
 }
 
+/// A directory named by an environment variable, ignoring an empty value.
+fn from_env(key: &str) -> Option<PathBuf> {
+    std::env::var_os(key)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Where a user's own themes live, and where `theme install` puts them.
+pub fn user_theme_dir() -> Option<PathBuf> {
+    from_env("XDG_CONFIG_HOME")
+        .or_else(|| from_env("HOME").map(|home| home.join(".config")))
+        .map(|base| base.join("riso/themes"))
+}
+
+/// Where riso looks for themes when no directory is given, least specific
+/// first.
+///
+/// `locate` overlays later directories over earlier ones, so this order puts
+/// the user's own themes last, where they win over what a package or the
+/// session provides. `RISO_THEMES` is how a distribution or a session points
+/// riso at themes it ships, without every command having to name them.
+pub fn default_theme_dirs() -> Vec<PathBuf> {
+    let mut dirs = vec![
+        PathBuf::from("/usr/share/riso/themes"),
+        PathBuf::from("/etc/riso/themes"),
+    ];
+
+    if let Some(list) = std::env::var_os("RISO_THEMES") {
+        dirs.extend(std::env::split_paths(&list).filter(|p| !p.as_os_str().is_empty()));
+    }
+
+    let data = from_env("XDG_DATA_HOME")
+        .or_else(|| from_env("HOME").map(|home| home.join(".local/share")))
+        .map(|base| base.join("riso/themes"));
+    dirs.extend(data);
+    dirs.extend(user_theme_dir());
+
+    dirs
+}
+
+/// Write the theme compiled into riso to `dir`, so that a system with none
+/// installed still has one, as a directory the user can read and edit.
+///
+/// Returns the theme's path. Existing files are left alone: this restores a
+/// missing fallback, it does not undo edits to it.
+pub fn seed_fallback(dir: &Path) -> Result<PathBuf, IoError> {
+    let theme = dir.join(crate::builtin::FALLBACK_THEME);
+
+    for (name, contents) in crate::builtin::FALLBACK_THEME_FILES {
+        let path = theme.join(name);
+        if !path.exists() {
+            crate::atomic::write_atomic(&path, contents)?;
+        }
+    }
+
+    Ok(theme)
+}
+
 /// Every theme across the given directories, sorted, first occurrence winning.
 ///
 /// `writable` names the directory a user installs into; themes anywhere else
@@ -235,6 +293,42 @@ mod tests {
         let path = dir.join(name);
         std::fs::create_dir_all(&path).expect("mkdir");
         std::fs::write(path.join(PALETTE_FILE), "background = \"#000000\"\n").expect("write");
+    }
+
+    #[test]
+    fn seeds_the_fallback_as_a_theme_that_validates() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let theme = seed_fallback(dir.path()).expect("seed");
+
+        assert_eq!(theme.file_name().unwrap(), crate::builtin::FALLBACK_THEME);
+        assert!(theme.join(PALETTE_FILE).is_file());
+        assert!(theme.join("LICENSE").is_file());
+
+        let found = installed(&[dir.path().to_path_buf()], Some(dir.path()));
+        assert_eq!(found.len(), 1);
+        assert!(found[0].removable);
+    }
+
+    #[test]
+    fn seeding_again_keeps_what_the_user_edited() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let theme = seed_fallback(dir.path()).expect("seed");
+        std::fs::write(theme.join(PALETTE_FILE), "background = \"#ffffff\"\n").expect("write");
+
+        seed_fallback(dir.path()).expect("seed again");
+
+        let kept = std::fs::read_to_string(theme.join(PALETTE_FILE)).expect("read");
+        assert_eq!(kept, "background = \"#ffffff\"\n");
+    }
+
+    #[test]
+    fn the_search_path_ends_with_the_directory_the_user_owns() {
+        let dirs = default_theme_dirs();
+
+        assert_eq!(dirs.first().unwrap(), Path::new("/usr/share/riso/themes"));
+        // Last is what `locate` overlays over everything else.
+        assert!(dirs.last().unwrap().ends_with("riso/themes"));
+        assert_eq!(Some(dirs.last().unwrap()), user_theme_dir().as_ref());
     }
 
     #[test]

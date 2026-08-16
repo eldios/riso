@@ -1,0 +1,35 @@
+## The theme riso falls back to when a system has no others installed.
+## Neutral greys and muted accents, so it reads as an absence of theming
+## rather than a choice. Copy this file to start one of your own.
+
+mode = "dark"
+
+accent = "#7f9fbf"
+selection = "#2c3138"
+muted = "#4a5058"
+
+background = "#16181c"
+dark_background = "#101216"
+darker_background = "#0a0c0e"
+lighter_background = "#1f2229"
+
+foreground = "#c3c7cc"
+dark_foreground = "#7b8189"
+light_foreground = "#d3d7dc"
+bright_foreground = "#e6e9ec"
+
+red = "#c07a7a"
+yellow = "#bfae7f"
+orange = "#c0937a"
+green = "#8ab08a"
+cyan = "#7fabab"
+blue = "#7f9fbf"
+magenta = "#a48ab0"
+brown = "#8a7360"
+
+bright_red = "#d49292"
+bright_yellow = "#d4c599"
+bright_green = "#a3c7a3"
+bright_cyan = "#99c2c2"
+bright_blue = "#99b6d4"
+bright_magenta = "#bda3c7"

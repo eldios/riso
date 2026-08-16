@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
@@ -23,8 +23,9 @@ enum Command {
     Set {
         /// Theme name; spaces and case do not matter
         name: String,
-        /// Theme directory; repeat for more, later ones overlay earlier ones
-        #[arg(long = "themes", value_name = "DIR", required = true)]
+        /// Theme directory; repeat for more, later ones overlay earlier ones.
+        /// Defaults to riso's search path.
+        #[arg(long = "themes", value_name = "DIR")]
         theme_dirs: Vec<PathBuf>,
         /// Template directory; repeat for more, earlier ones take precedence
         #[arg(long = "templates", value_name = "DIR")]
@@ -247,26 +248,42 @@ fn user_plugin_dir() -> Result<PathBuf, String> {
 }
 
 fn user_theme_dir() -> Result<PathBuf, String> {
-    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        if !xdg.is_empty() {
-            return Ok(PathBuf::from(xdg).join("riso/themes"));
-        }
+    catalog::user_theme_dir().ok_or_else(|| "HOME is not set".to_owned())
+}
+
+/// Restore the built-in theme, reporting rather than failing: it is a way out
+/// of having nothing, so refusing to continue would defeat it.
+fn seed_fallback(dir: &Path) {
+    match catalog::seed_fallback(dir) {
+        Ok(path) => eprintln!(
+            "riso: no themes found, wrote the built-in one to {}",
+            path.display()
+        ),
+        Err(e) => eprintln!("riso: could not write the built-in theme: {e}"),
     }
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_owned())?;
-    Ok(PathBuf::from(home).join(".config/riso/themes"))
 }
 
 fn run_theme(action: ThemeAction) -> Result<(), String> {
     match action {
         ThemeAction::List { theme_dirs } => {
-            let mut dirs = theme_dirs;
             let user = user_theme_dir()?;
+            let mut dirs = if theme_dirs.is_empty() {
+                // installed() lets the first occurrence win, the reverse of
+                // the overlay order the search path is written in.
+                let mut defaults = catalog::default_theme_dirs();
+                defaults.reverse();
+                defaults
+            } else {
+                theme_dirs
+            };
             if !dirs.contains(&user) {
                 dirs.insert(0, user.clone());
             }
-            let found = catalog::installed(&dirs, Some(&user));
+
+            let mut found = catalog::installed(&dirs, Some(&user));
             if found.is_empty() {
-                eprintln!("riso: no themes found in {} directories", dirs.len());
+                seed_fallback(&user);
+                found = catalog::installed(&dirs, Some(&user));
             }
             for theme in found {
                 println!(
@@ -410,6 +427,21 @@ fn run(cli: Cli) -> Result<(), String> {
                 }
                 None => Desktop::detect(),
             };
+            let mut theme_dirs = if theme_dirs.is_empty() {
+                catalog::default_theme_dirs()
+            } else {
+                theme_dirs
+            };
+            // A machine with no themes at all still applies one: the built-in
+            // is written out as an ordinary theme rather than special-cased.
+            if catalog::installed(&theme_dirs, None).is_empty() {
+                if let Some(user) = catalog::user_theme_dir() {
+                    seed_fallback(&user);
+                    if !theme_dirs.contains(&user) {
+                        theme_dirs.push(user);
+                    }
+                }
+            }
             let request = Request {
                 name,
                 theme_dirs,

@@ -8,6 +8,16 @@
 //! They are the weakest layer: a template directory or a plugin claiming the
 //! same output name replaces the built-in one entirely.
 
+/// The theme riso falls back to when a system has no others installed, so
+/// that applying a theme never depends on having first found one.
+pub const FALLBACK_THEME: &str = "plain";
+
+/// The files that theme consists of, written out as they are.
+pub const FALLBACK_THEME_FILES: &[(&str, &str)] = &[
+    ("colors.toml", include_str!("../themes/plain/colors.toml")),
+    ("LICENSE", include_str!("../themes/plain/LICENSE")),
+];
+
 /// A template compiled into the binary, named by what it produces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Builtin {
