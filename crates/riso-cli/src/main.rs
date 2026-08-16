@@ -426,6 +426,11 @@ fn run(cli: Cli) -> Result<(), String> {
                 },
                 home: home_dir()?,
                 desktop,
+                // Omarchy publishes this; with it riso calls Quickshell
+                // directly rather than the wrapper script.
+                shell_config: std::env::var_os("OMARCHY_PATH")
+                    .map(|p| PathBuf::from(p).join("shell"))
+                    .filter(|p| p.is_dir()),
                 skip_reload: no_reload,
             };
 

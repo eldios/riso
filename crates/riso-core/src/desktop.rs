@@ -28,6 +28,10 @@ pub struct Payload {
     pub colors: Option<Vec<u8>>,
     /// Contents of the theme's `shell.toml`.
     pub shell: Option<Vec<u8>>,
+    /// Quickshell configuration directory of the running shell, when there is
+    /// one. Given it, riso talks to Quickshell directly instead of going
+    /// through a desktop's own wrapper script.
+    pub shell_config: Option<std::path::PathBuf>,
 }
 
 impl Desktop {
@@ -83,15 +87,36 @@ impl Desktop {
         match self {
             // Handing over the palette is what lets the shell retint without
             // restarting; base64 keeps it to a single argument.
-            Self::Omarchy => exec.run(
-                "omarchy-shell",
-                &[
-                    "shell".to_owned(),
-                    "applyTheme".to_owned(),
-                    payload.colors.as_deref().map(base64).unwrap_or_default(),
-                    payload.shell.as_deref().map(base64).unwrap_or_default(),
-                ],
-            ),
+            //
+            // Omarchy's own `omarchy-shell` is a wrapper over this same
+            // Quickshell call, so knowing the config directory lets riso skip
+            // it and talk to Quickshell, which is nobody's in particular.
+            Self::Omarchy => {
+                let colors = payload.colors.as_deref().map(base64).unwrap_or_default();
+                let shell = payload.shell.as_deref().map(base64).unwrap_or_default();
+
+                match &payload.shell_config {
+                    Some(dir) => exec.run(
+                        "qs",
+                        &[
+                            "ipc".to_owned(),
+                            "-n".to_owned(),
+                            "-p".to_owned(),
+                            dir.to_string_lossy().into_owned(),
+                            "call".to_owned(),
+                            "--".to_owned(),
+                            "shell".to_owned(),
+                            "applyTheme".to_owned(),
+                            colors,
+                            shell,
+                        ],
+                    ),
+                    None => exec.run(
+                        "omarchy-shell",
+                        &["shell".to_owned(), "applyTheme".to_owned(), colors, shell],
+                    ),
+                }
+            }
             Self::Hyprland => exec.run("hyprctl", &owned(&["reload"])),
             Self::Sway => exec.run("swaymsg", &owned(&["reload"])),
             Self::Niri => exec.run("niri", &owned(&["msg", "action", "do-screen-transition"])),
@@ -165,11 +190,31 @@ mod tests {
     }
 
     #[test]
+    fn talks_to_quickshell_directly_when_it_knows_where_it_lives() {
+        let recorder = RecordingExecutor::default();
+        let payload = Payload {
+            colors: Some(b"foo".to_vec()),
+            shell: Some(b"bar".to_vec()),
+            shell_config: Some(std::path::PathBuf::from("/usr/share/omarchy/shell")),
+        };
+
+        Desktop::Omarchy
+            .reload(&recorder, &payload)
+            .expect("reload");
+
+        assert_eq!(
+            recorder.calls(),
+            ["qs ipc -n -p /usr/share/omarchy/shell call -- shell applyTheme Zm9v YmFy"]
+        );
+    }
+
+    #[test]
     fn hands_omarchy_the_palette_encoded() {
         let recorder = RecordingExecutor::default();
         let payload = Payload {
             colors: Some(b"foo".to_vec()),
             shell: Some(b"bar".to_vec()),
+            shell_config: None,
         };
 
         Desktop::Omarchy

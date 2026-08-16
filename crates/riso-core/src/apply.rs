@@ -101,6 +101,9 @@ pub struct Request {
     pub home: PathBuf,
     /// Which desktop to notify once the theme is in place.
     pub desktop: Desktop,
+    /// Quickshell configuration directory of the running shell, when the
+    /// desktop is one that runs on Quickshell.
+    pub shell_config: Option<PathBuf>,
     /// Skip telling the running desktop about the change.
     pub skip_reload: bool,
 }
@@ -188,7 +191,12 @@ pub fn apply(request: &Request, exec: &dyn Executor) -> Result<Applied, ApplyErr
     }
 
     if !request.skip_reload {
-        notify(request.desktop, &target, exec)?;
+        notify(
+            request.desktop,
+            &target,
+            request.shell_config.as_deref(),
+            exec,
+        )?;
     }
 
     if request.parts.hooks {
@@ -347,11 +355,17 @@ fn swap(staging: &Path, target: &Path) -> Result<(), IoError> {
 }
 
 /// Hand the new theme to the running desktop, in whatever form it wants it.
-fn notify(desktop: Desktop, target: &Path, exec: &dyn Executor) -> Result<(), ApplyError> {
+fn notify(
+    desktop: Desktop,
+    target: &Path,
+    shell_config: Option<&Path>,
+    exec: &dyn Executor,
+) -> Result<(), ApplyError> {
     let read = |name: &str| std::fs::read(target.join(name)).ok();
     let payload = Payload {
         colors: read(PALETTE_FILE),
         shell: read(SHELL_FILE),
+        shell_config: shell_config.map(Path::to_path_buf),
     };
 
     desktop.reload(exec, &payload)?;
@@ -441,6 +455,7 @@ mod tests {
             plugin_dirs: Vec::new(),
             home: f.state.clone(),
             desktop: Desktop::Omarchy,
+            shell_config: None,
             skip_reload: false,
         }
     }
