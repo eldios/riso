@@ -59,6 +59,21 @@ Four layers decide any given file, strongest first:
 Layer 4 is what makes a theme impossible to leave incomplete; layer 1 is what
 lets an author overrule the generator on the file they care about.
 
+## Your configuration stays yours
+
+`riso` renders fragments into its own tree and never rewrites an
+application's config file. The application's config, which belongs to you,
+includes the fragment: mako's `include=`, waybar's `@import`, hyprlock's
+`source`, a terminal's import directive. A theme change rewrites the
+fragment; every rule you wrote around the include survives it, and your own
+overrides can always be included after the fragment so they win.
+
+The one exception is a plugin, whose whole point is reaching a path the
+application dictates. What was at that path first is copied aside for
+`riso restore`, and the file opens with a comment saying it is generated and
+where edits belong, in whatever comment syntax its format speaks. A format
+with no comments, JSON above all, gets none.
+
 Fonts are tokens like colours, so a theme carries its own typography instead of
 leaving it to a setting somewhere else.
 
