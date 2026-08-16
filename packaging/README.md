@@ -10,21 +10,29 @@ compiled in.
 cd packaging && makepkg -si
 ```
 
-## Debian and RPM
-
-Both are built from the same crate metadata with the standard cargo helpers,
-which are not vendored here:
+## Debian, Ubuntu, Mint
 
 ```bash
-cargo install cargo-deb cargo-generate-rpm
-
-cargo deb                 # target/debian/riso_0.1.0_amd64.deb
-cargo build --release && cargo generate-rpm
+cargo build --release
+cargo deb -p riso-cli --no-build
 ```
 
-The manpage and licence are declared in `Cargo.toml` under
-`package.metadata.deb` and `package.metadata.generate-rpm`, so both packages
-carry them without a spec file.
+Reads `package.metadata.deb` from `crates/riso-cli/Cargo.toml`, so the manpage,
+the licence and the runtime dependencies come along without a control file.
+
+## Fedora, RHEL, openSUSE
+
+```bash
+cargo build --release
+rpmbuild --define "_topdir $PWD/target/rpm" -bb packaging/riso.spec
+```
+
+The spec installs an already-built binary, so every package ships the same
+artifact. Copy `target/release/riso`, `docs/riso.1`, `LICENSE`, `NOTICE` and
+`README.md` into `target/rpm/SOURCES` first.
+
+On a distribution whose rpm is not installed under `/usr`, add
+`--define "_prefix /usr"`.
 
 ## Nix
 

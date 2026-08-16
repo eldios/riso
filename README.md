@@ -1,29 +1,38 @@
 # riso
 
-An independent, community-driven ricing framework. A theme is data, and every
-config file the desktop reads is generated from it.
+A ricing framework for Linux desktops. Community-driven, and yours to extend.
 
-riso reads Omarchy themes natively and renders them identically, so a theme
-written for either works on both. Beyond that it goes its own way: any distro,
-any Wayland desktop, themes and extensions from any git repository, and a
-binary that carries what it needs instead of a tree of scripts.
+A theme is data: a palette, some typography, optionally a wallpaper. Everything
+the desktop reads is generated from it, so adding support for an application
+does not go back and make every existing theme incomplete. And when an author
+wants to hand-tune one file, what the theme ships wins over what was generated.
 
-Adding support for an application does not make existing themes incomplete,
-because a theme that says nothing about it still renders through the template.
-And a theme that wants to hand-write one file still can: what it ships wins.
+Runs on Arch and derivatives, Debian and its family, Fedora and the rpm world,
+and NixOS. One binary, a manpage, and `git` and `curl` for fetching things.
 
 ## Install
 
 ```bash
-riso theme install rose-pine                          # from the catalog
-riso theme install https://github.com/someone/x.git   # from any git repo
-riso set "Rose Pine"
+# Arch
+cd packaging && makepkg -si
+
+# Debian, Ubuntu, Mint
+cargo deb && sudo dpkg -i target/debian/riso_*.deb
+
+# Fedora, RHEL, openSUSE
+cargo build --release && cargo generate-rpm && sudo rpm -i target/generate-rpm/*.rpm
+
+# NixOS
+nix profile install github:eldios/riso
 ```
 
-Themes are validated before they are kept, on the client as well as in the
-catalog: installing from a git URL never passed through a catalog at all.
-
 ## Use
+
+```bash
+riso theme install rose-pine     # from the catalog
+riso theme install <git-url>     # from anywhere
+riso set "Rose Pine"
+```
 
 ```
 riso set <name>              apply a theme and tell the desktop
@@ -50,19 +59,15 @@ Four layers decide any given file, strongest first:
 Layer 4 is what makes a theme impossible to leave incomplete; layer 1 is what
 lets an author overrule the generator on the file they care about.
 
-Fonts are tokens like colours, so a theme carries its own typography rather
-than leaving it to a separate setting.
+Fonts are tokens like colours, so a theme carries its own typography instead of
+leaving it to a setting somewhere else.
 
-## Compatibility
+## Desktops
 
-`riso` reads Omarchy themes natively and renders them byte-for-byte the way
-Omarchy's own pipeline does, verified against every theme it ships. The point
-is not to be a copy: it is that a theme written for either works on both, and
-that this claim is checked rather than asserted.
-
-```bash
-just conformance   # diff riso against Omarchy's renderer, theme by theme
-```
+`riso` writes the files and then tells the desktop, in whatever way that
+desktop expects: Hyprland, Sway, niri, and Omarchy are recognized from the
+session. A desktop it does not know still gets its files written, which is all
+some of them need.
 
 ## Extending
 
@@ -82,28 +87,35 @@ target = "~/.config/zed/themes/riso.json"
 Whatever was at that path first is copied aside, so `riso restore` can put it
 back byte for byte.
 
+Themes and plugins are ordinary git repositories. The catalog is a static index
+that points at them, so publishing one needs no account anywhere and installing
+one is a clone with a checksum.
+
+## Safety
+
+A theme is data and `riso` enforces it. Executable files, directives that name
+a program to run, symlinks, and paths that climb out of the theme directory are
+all refused, on the client as well as in the catalog. A theme that arrives from
+a git URL never passed through a catalog at all, which is exactly why the check
+runs twice.
+
+## Compatibility
+
+`riso` also reads themes written for [Omarchy](https://github.com/basecamp/omarchy),
+and renders them identically: the conformance suite checks every theme that
+project publishes, byte for byte. A theme written for either works on both. See
+[NOTICE](NOTICE).
+
 ## Develop
 
 ```bash
 nix develop        # toolchain plus every tool the gates need
 just ci            # format, lint, tests
-just conformance   # interoperability against upstream
+just conformance   # the interoperability check
 ```
-
-`riso` calls `git` and `curl` at run time and nothing else; everything it
-needs is in the binary. Packaging notes are in `packaging/`.
-
-## Where riso came from
-
-The theme format riso speaks was designed in
-[Omarchy](https://github.com/basecamp/omarchy), and riso implements it rather
-than inventing a second one that would split themes into two incompatible
-worlds. Credit for the format goes there; the implementation, the direction and
-the governance are riso's own. See [NOTICE](NOTICE).
 
 ## Status
 
 Early, and honest about it. Rendering, applying, backgrounds, themes, plugins,
 ownership tracking and validation work and are tested. Not built yet: a theme
-carousel, capture from a running desktop, and the desktops beyond Omarchy,
-Hyprland, Sway and niri.
+carousel, capture from a running desktop, and more desktops.

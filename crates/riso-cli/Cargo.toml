@@ -4,14 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "riso"
-path = "src/main.rs"
-
-description = "Modular ricing framework: renders themes into the files a desktop reads"
+description = "Ricing framework for Linux desktops: renders themes into the files a desktop reads"
 homepage = "https://github.com/eldios/riso"
 repository = "https://github.com/eldios/riso"
 readme = "../../README.md"
+
+[[bin]]
+name = "riso"
+path = "src/main.rs"
 
 # Both helpers read this metadata instead of a spec file, so the manpage and
 # licence land in the package without one.
