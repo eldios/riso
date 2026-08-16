@@ -1,5 +1,8 @@
-// The riso theme carousel: every theme riso can see, as a cover-flow strip
-// of preview cards. Left/Right browse, Enter applies, Escape leaves.
+// The riso theme carousel, drawn the way Omarchy draws its image picker: a
+// centred panel where the selected slice expands in place into the large
+// slanted preview, and its neighbours stay packed beside it as narrow
+// slanted slivers. Left/Right browse, type to filter, Enter applies,
+// Escape clears the filter and then leaves.
 //
 // A standalone Quickshell window on the Wayland overlay layer, so it works
 // the same whichever desktop shell owns the screen.
@@ -8,15 +11,57 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Shapes
 import QtQuick.Effects
 
 ShellRoot {
   id: root
 
   property var themes: []
-  property int current: 0
+  property int selectedIndex: 0
   property string activeTheme: ""
+  property string filterText: ""
   property bool busy: false
+
+  function matches(i) {
+    if (!filterText) return true
+    return themes[i].name.toLowerCase().includes(filterText.toLowerCase())
+  }
+
+  // Position of item i among the items the filter keeps.
+  function filteredPosition(i) {
+    let pos = 0
+    for (let k = 0; k < i; k++) if (matches(k)) pos++
+    return pos
+  }
+
+  function selectAdjacent(direction) {
+    let i = selectedIndex
+    for (let step = 0; step < themes.length; step++) {
+      i += direction
+      if (i < 0 || i >= themes.length) return
+      if (matches(i)) { selectedIndex = i; return }
+    }
+  }
+
+  function updateFilter(text) {
+    filterText = text
+    if (themes.length === 0) return
+    if (!matches(selectedIndex)) {
+      for (let i = 0; i < themes.length; i++) {
+        if (matches(i)) { selectedIndex = i; return }
+      }
+    }
+  }
+
+  function apply() {
+    if (busy || themes.length === 0 || !matches(selectedIndex)) return
+    busy = true
+    const applyCmd = Quickshell.env("RISO_CAROUSEL_APPLY") || "riso set"
+    applyProc.command = ["sh", "-c", applyCmd + " \"$1\"", "riso-carousel",
+                         themes[selectedIndex].name]
+    applyProc.running = true
+  }
 
   // name<TAB>preview per line, from the sibling script.
   Process {
@@ -33,7 +78,7 @@ ShellRoot {
         }
         root.themes = rows
         for (let i = 0; i < rows.length; i++) {
-          if (rows[i].name === root.activeTheme) { root.current = i; break }
+          if (rows[i].name === root.activeTheme) { root.selectedIndex = i; break }
         }
       }
     }
@@ -48,7 +93,7 @@ ShellRoot {
       onStreamFinished: {
         root.activeTheme = text.trim()
         for (let i = 0; i < root.themes.length; i++) {
-          if (root.themes[i].name === root.activeTheme) { root.current = i; break }
+          if (root.themes[i].name === root.activeTheme) { root.selectedIndex = i; break }
         }
       }
     }
@@ -57,15 +102,6 @@ ShellRoot {
   Process {
     id: applyProc
     onExited: Qt.quit()
-  }
-
-  function apply() {
-    if (busy || themes.length === 0) return
-    busy = true
-    const applyCmd = Quickshell.env("RISO_CAROUSEL_APPLY") || "riso set"
-    applyProc.command = ["sh", "-c", applyCmd + " \"$1\"", "riso-carousel",
-                         themes[current].name]
-    applyProc.running = true
   }
 
   PanelWindow {
@@ -77,160 +113,204 @@ ShellRoot {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
-    // A scrim that breathes: darkest behind the strip, lighter at the edges.
+    // Omarchy's picker geometry, scaled to the monitor instead of fixed:
+    // their 768-wide preview with 108-wide slices overlapping by 30 and a
+    // 28-point lean, all kept in the same proportions.
+    property int expandedW: Math.round(width * 0.42)
+    property int expandedH: Math.round(expandedW * 9 / 16)
+    property int sliceW: Math.round(expandedW * 0.14)
+    property int sliceH: Math.round(expandedH * 0.91)
+    property int sliceSpacing: -Math.round(sliceW * 0.28)
+    property real skew: sliceH * 0.065
+    property real itemStep: sliceW + sliceSpacing
+
     Rectangle {
       anchors.fill: parent
-      gradient: Gradient {
-        GradientStop { position: 0.0; color: "#a6000000" }
-        GradientStop { position: 0.5; color: "#e0000000" }
-        GradientStop { position: 1.0; color: "#a6000000" }
-      }
+      color: "#000000"
+      opacity: 0.72
       MouseArea { anchors.fill: parent; onClicked: Qt.quit() }
     }
 
-    Column {
+    Item {
+      id: carousel
       anchors.centerIn: parent
-      spacing: 26
-      width: parent.width
+      width: win.expandedW + 14 * win.itemStep
+      height: win.expandedH
+      clip: false
+      focus: true
 
-      ListView {
-        id: strip
-        width: parent.width
-        height: 480
-        orientation: ListView.Horizontal
-        spacing: -46
-        model: root.themes
-        currentIndex: root.current
-        highlightMoveDuration: 180
-        preferredHighlightBegin: width / 2 - 170
-        preferredHighlightEnd: width / 2 + 170
-        highlightRangeMode: ListView.StrictlyEnforceRange
-        maximumFlickVelocity: 4200
-        focus: true
+      readonly property real previewX: (width - win.expandedW) / 2
 
-        onCurrentIndexChanged: root.current = currentIndex
+      Keys.priority: Keys.BeforeItem
+      Keys.onPressed: function (event) {
+        if (event.key === Qt.Key_Escape) {
+          if (root.filterText) root.updateFilter("")
+          else Qt.quit()
+          event.accepted = true
+        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+          root.apply()
+          event.accepted = true
+        } else if (event.key === Qt.Key_Left
+                   || (event.key === Qt.Key_Tab && event.modifiers & Qt.ShiftModifier)
+                   || event.key === Qt.Key_Backtab) {
+          root.selectAdjacent(-1)
+          event.accepted = true
+        } else if (event.key === Qt.Key_Right || event.key === Qt.Key_Tab) {
+          root.selectAdjacent(1)
+          event.accepted = true
+        } else if (event.key === Qt.Key_Backspace) {
+          root.updateFilter(root.filterText.slice(0, -1))
+          event.accepted = true
+        } else if (event.text && event.text.length === 1
+                   && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127
+                   && (event.modifiers === Qt.NoModifier || event.modifiers === Qt.ShiftModifier)) {
+          root.updateFilter(root.filterText + event.text)
+          event.accepted = true
+        }
+      }
 
-        Keys.onLeftPressed: decrementCurrentIndex()
-        Keys.onRightPressed: incrementCurrentIndex()
-        Keys.onReturnPressed: root.apply()
-        Keys.onEnterPressed: root.apply()
-        Keys.onEscapePressed: Qt.quit()
+      Component.onCompleted: forceActiveFocus()
+
+      Repeater {
+        model: root.themes.length
 
         delegate: Item {
-          id: slot
-          width: 340
-          height: 480
-          z: isCurrent ? 100 : 50 - Math.abs(index - strip.currentIndex)
+          id: item
+          required property int index
 
-          property bool isCurrent: ListView.isCurrentItem
-          property int side: index === strip.currentIndex
-                             ? 0 : (index < strip.currentIndex ? -1 : 1)
+          readonly property var themeData: root.themes[index]
+          readonly property bool matched: root.matches(index)
+          readonly property int relativeIndex: root.filteredPosition(index)
+                                               - root.filteredPosition(root.selectedIndex)
+          readonly property bool selected: matched && index === root.selectedIndex
+          readonly property bool nearby: matched && Math.abs(relativeIndex) <= 16
+
+          visible: nearby
+          x: selected ? carousel.previewX
+             : (relativeIndex < 0
+                ? carousel.previewX + relativeIndex * win.itemStep
+                : carousel.previewX + win.expandedW + win.sliceSpacing
+                  + (relativeIndex - 1) * win.itemStep)
+          width: selected ? win.expandedW : win.sliceW
+          height: selected ? win.expandedH : win.sliceH
+          y: (win.expandedH - height) / 2
+          z: selected ? 100 : 50 - Math.min(Math.abs(relativeIndex), 40)
+
+          Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+          Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+          Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+          Behavior on y { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+          // Every slice, the open one included, is the same slanted
+          // parallelogram: the top edge leads by the skew.
+          readonly property real topLeft: win.skew
+          readonly property real topRight: width
+          readonly property real bottomRight: width - win.skew
+          readonly property real bottomLeft: 0
 
           Item {
-            anchors.centerIn: parent
-            width: 320
-            height: slot.isCurrent ? 460 : 380
-            Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-
-            transform: Rotation {
-              origin.x: 160
-              origin.y: 220
-              axis { x: 0; y: 1; z: 0 }
-              angle: slot.side * 32
-              Behavior on angle { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-            }
-
-            opacity: slot.isCurrent ? 1.0 : 0.55
-            Behavior on opacity { NumberAnimation { duration: 150 } }
-
-            Rectangle {
-              id: card
-              anchors.fill: parent
-              radius: 16
-              color: "#181a1f"
-              border.width: slot.isCurrent ? 2 : 1
-              border.color: slot.isCurrent ? "#9fbcd8" : "#33ffffff"
-              clip: true
-
-              Image {
-                id: shot
-                anchors.fill: parent
-                anchors.margins: 3
-                source: modelData.preview ? "file://" + modelData.preview : ""
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                visible: modelData.preview !== ""
-              }
-
-              // Legible name on any image: fade the bottom, then write on it.
-              Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: 96
-                gradient: Gradient {
-                  GradientStop { position: 0.0; color: "#00000000" }
-                  GradientStop { position: 1.0; color: "#d9000000" }
-                }
-              }
-
-              Column {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 18
-                spacing: 6
-
-                Text {
-                  anchors.horizontalCenter: parent.horizontalCenter
-                  text: modelData.name
-                  color: "#f2f4f6"
-                  font.pixelSize: slot.isCurrent ? 21 : 17
-                  font.bold: slot.isCurrent
-                  style: Text.Raised
-                  styleColor: "#80000000"
-                }
-
-                Row {
-                  anchors.horizontalCenter: parent.horizontalCenter
-                  spacing: 6
-                  visible: modelData.name === root.activeTheme
-                  Rectangle { width: 7; height: 7; radius: 3.5; color: "#9fbcd8"
-                              anchors.verticalCenter: parent.verticalCenter }
-                  Text { text: "current"; color: "#c9d4de"; font.pixelSize: 12 }
-                }
-              }
-
-              MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                  if (root.current === index) root.apply()
-                  else strip.currentIndex = index
-                }
-              }
-            }
-
+            id: maskShape
+            anchors.fill: parent
+            visible: false
             layer.enabled: true
-            layer.effect: MultiEffect {
-              shadowEnabled: true
-              shadowBlur: slot.isCurrent ? 1.0 : 0.5
-              shadowColor: "#aa000000"
-              shadowVerticalOffset: 10
+
+            Shape {
+              anchors.fill: parent
+              antialiasing: true
+              preferredRendererType: Shape.CurveRenderer
+              ShapePath {
+                fillColor: "white"
+                strokeColor: "transparent"
+                startX: item.topLeft; startY: 0
+                PathLine { x: item.topRight; y: 0 }
+                PathLine { x: item.bottomRight; y: item.height }
+                PathLine { x: item.bottomLeft; y: item.height }
+                PathLine { x: item.topLeft; y: 0 }
+              }
             }
           }
+
+          Item {
+            anchors.fill: parent
+            layer.enabled: true
+            layer.smooth: true
+            layer.effect: MultiEffect {
+              maskEnabled: true
+              maskSource: maskShape
+              maskThresholdMin: 0.3
+              maskSpreadAtMin: 0.3
+            }
+
+            Image {
+              anchors.fill: parent
+              source: item.themeData.preview ? "file://" + item.themeData.preview : ""
+              fillMode: Image.PreserveAspectCrop
+              asynchronous: true
+              cache: true
+              smooth: true
+            }
+
+            Rectangle {
+              anchors.fill: parent
+              color: "#101318"
+              opacity: item.selected ? 0 : 0.42
+              Behavior on opacity { NumberAnimation { duration: 150 } }
+            }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: item.selected ? root.apply() : (root.selectedIndex = index)
+          }
         }
+      }
+    }
+
+    // Name under the carousel, the way their labels sit under the strip.
+    Column {
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.top: carousel.bottom
+      anchors.topMargin: 24
+      spacing: 10
+
+      Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: 10
+
+        Text {
+          text: root.themes.length > 0 && root.matches(root.selectedIndex)
+                ? root.themes[root.selectedIndex].name : ""
+          color: "#f2f4f6"
+          font.pixelSize: 24
+          font.bold: true
+        }
+        Text {
+          visible: root.themes.length > 0
+                   && root.themes[root.selectedIndex].name === root.activeTheme
+          anchors.verticalCenter: parent.verticalCenter
+          text: "● current"
+          color: "#9fbcd8"
+          font.pixelSize: 13
+        }
+      }
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        visible: root.filterText !== ""
+        text: "filter: " + root.filterText
+        color: "#c9d4de"
+        font.pixelSize: 14
       }
 
       Row {
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 22
+        spacing: 26
 
         Text { text: "← →  browse"; color: "#8b939c"; font.pixelSize: 13 }
+        Text { text: "type  filter"; color: "#8b939c"; font.pixelSize: 13 }
         Text { text: "enter  apply"; color: "#8b939c"; font.pixelSize: 13 }
-        Text { text: "esc  close"; color: "#8b939c"; font.pixelSize: 13 }
-        Text {
-          text: root.busy ? "applying…" : ""
-          color: "#c9d4de"; font.pixelSize: 13
-        }
+        Text { text: root.busy ? "applying…" : "esc  close"; color: "#8b939c"; font.pixelSize: 13 }
       }
     }
   }
