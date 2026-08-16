@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#
+# The theme carousel: a standalone Quickshell window, owned by no desktop.
+# RISO_CAROUSEL_APPLY names the command a selection runs; it defaults to
+# riso's own apply.
+
+set -euo pipefail
+here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+export RISO_CAROUSEL_APPLY="${RISO_CAROUSEL_APPLY:-riso set}"
+exec quickshell -n -p "$here"
