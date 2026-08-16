@@ -76,6 +76,10 @@ pub const TEMPLATES: &[Builtin] = &[
         source: include_str!("../templates/vscode.json.tpl"),
     },
     Builtin {
+        name: "walker.css",
+        source: include_str!("../templates/walker.css.tpl"),
+    },
+    Builtin {
         name: "waybar.css",
         source: include_str!("../templates/waybar.css.tpl"),
     },
