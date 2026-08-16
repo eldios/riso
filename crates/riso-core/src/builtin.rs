@@ -36,6 +36,10 @@ pub const TEMPLATES: &[Builtin] = &[
         source: include_str!("../templates/btop.theme.tpl"),
     },
     Builtin {
+        name: "caelestia.json",
+        source: include_str!("../templates/caelestia.json.tpl"),
+    },
+    Builtin {
         name: "chromium.theme",
         source: include_str!("../templates/chromium.theme.tpl"),
     },
