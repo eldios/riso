@@ -52,8 +52,16 @@ pub const TEMPLATES: &[Builtin] = &[
         source: include_str!("../templates/helix.toml.tpl"),
     },
     Builtin {
+        name: "hyprlock.conf",
+        source: include_str!("../templates/hyprlock.conf.tpl"),
+    },
+    Builtin {
         name: "kitty.conf",
         source: include_str!("../templates/kitty.conf.tpl"),
+    },
+    Builtin {
+        name: "mako.ini",
+        source: include_str!("../templates/mako.ini.tpl"),
     },
     Builtin {
         name: "neovim.lua",
@@ -66,6 +74,10 @@ pub const TEMPLATES: &[Builtin] = &[
     Builtin {
         name: "vscode.json",
         source: include_str!("../templates/vscode.json.tpl"),
+    },
+    Builtin {
+        name: "waybar.css",
+        source: include_str!("../templates/waybar.css.tpl"),
     },
 ];
 
