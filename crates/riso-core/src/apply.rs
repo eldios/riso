@@ -422,6 +422,16 @@ pub fn copy_tree(from: &Path, to: &Path) -> Result<(), IoError> {
         } else {
             std::fs::copy(&source, &destination)
                 .map_err(|e| IoError::Write(destination.clone(), e))?;
+            // What riso writes belongs to the user. A theme shipped by a
+            // package manager can be read-only, the Nix store above all, and
+            // fs::copy carries that along: normalize, or the generated tree
+            // cannot be edited or cleanly replaced.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ =
+                    std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o644));
+            }
         }
     }
     Ok(())
@@ -483,6 +493,28 @@ mod tests {
             shell_config: None,
             skip_reload: false,
         }
+    }
+
+    #[test]
+    fn copied_files_are_writable_even_from_a_read_only_source() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let source = dir.path().join("store/theme");
+        write(&source.join("colors.toml"), "background = \"#000000\"\n");
+        std::fs::set_permissions(
+            source.join("colors.toml"),
+            std::fs::Permissions::from_mode(0o444),
+        )
+        .expect("chmod");
+
+        let out = dir.path().join("out");
+        copy_tree(&source, &out).expect("copy");
+
+        let mode = std::fs::metadata(out.join("colors.toml"))
+            .expect("stat")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o644, "store permissions must not propagate");
     }
 
     #[test]
