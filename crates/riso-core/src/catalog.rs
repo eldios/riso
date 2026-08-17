@@ -118,10 +118,23 @@ pub fn user_theme_dir() -> Option<PathBuf> {
 /// session provides. `RISO_THEMES` is how a distribution or a session points
 /// riso at themes it ships, without every command having to name them.
 pub fn default_theme_dirs() -> Vec<PathBuf> {
+    default_theme_dirs_with(from_env("OMARCHY_PATH"))
+}
+
+/// The search path, given whether an Omarchy install is present.
+///
+/// On an Omarchy system riso is a drop-in: the themes that desktop ships,
+/// and the ones its users install in its own directory, are part of the
+/// default view rather than something every command must be told about.
+fn default_theme_dirs_with(omarchy: Option<PathBuf>) -> Vec<PathBuf> {
     let mut dirs = vec![
         PathBuf::from("/usr/share/riso/themes"),
         PathBuf::from("/etc/riso/themes"),
     ];
+
+    if let Some(omarchy) = omarchy {
+        dirs.push(omarchy.join("themes"));
+    }
 
     if let Some(list) = std::env::var_os("RISO_THEMES") {
         dirs.extend(std::env::split_paths(&list).filter(|p| !p.as_os_str().is_empty()));
@@ -131,6 +144,11 @@ pub fn default_theme_dirs() -> Vec<PathBuf> {
         .or_else(|| from_env("HOME").map(|home| home.join(".local/share")))
         .map(|base| base.join("riso/themes"));
     dirs.extend(data);
+    if let Some(config) =
+        from_env("XDG_CONFIG_HOME").or_else(|| from_env("HOME").map(|home| home.join(".config")))
+    {
+        dirs.push(config.join("omarchy/themes"));
+    }
     dirs.extend(user_theme_dir());
 
     dirs
@@ -342,6 +360,17 @@ mod tests {
         // Last is what `locate` overlays over everything else.
         assert!(dirs.last().unwrap().ends_with("riso/themes"));
         assert_eq!(Some(dirs.last().unwrap()), user_theme_dir().as_ref());
+    }
+
+    #[test]
+    fn an_omarchy_install_joins_the_search_path_before_the_user() {
+        let dirs = default_theme_dirs_with(Some(PathBuf::from("/usr/share/omarchy")));
+        let omarchy = dirs
+            .iter()
+            .position(|d| d == Path::new("/usr/share/omarchy/themes"))
+            .expect("omarchy themes on the path");
+        let user = dirs.len() - 1;
+        assert!(omarchy < user, "the user's own themes still win");
     }
 
     #[test]

@@ -475,16 +475,22 @@ fn main() -> ExitCode {
 
 /// Where generated theme state lives, honouring XDG before falling back.
 ///
-/// A desktop that expects the generated theme somewhere else is told with
-/// `--state`; the default is riso's own directory.
+/// On an Omarchy system the desktop reads its state from its own directory,
+/// so riso renders where that desktop looks and is a drop-in; anywhere else
+/// the state is riso's own. `--state` overrides either way.
 fn default_state_dir() -> Result<PathBuf, String> {
+    let name = if std::env::var_os("OMARCHY_PATH").is_some_and(|v| !v.is_empty()) {
+        "omarchy"
+    } else {
+        "riso"
+    };
     if let Ok(xdg) = std::env::var("XDG_STATE_HOME") {
         if !xdg.is_empty() {
-            return Ok(PathBuf::from(xdg).join("riso"));
+            return Ok(PathBuf::from(xdg).join(name));
         }
     }
     let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_owned())?;
-    Ok(PathBuf::from(home).join(".local/state/riso"))
+    Ok(PathBuf::from(home).join(".local/state").join(name))
 }
 
 fn run(cli: Cli) -> Result<(), String> {
@@ -524,6 +530,24 @@ fn run(cli: Cli) -> Result<(), String> {
                     }
                 }
             }
+            // On an Omarchy system its template layers apply by default:
+            // the user's own, then the desktop's. Explicit flags replace
+            // them entirely.
+            let template_dirs = if template_dirs.is_empty() {
+                match std::env::var_os("OMARCHY_PATH").filter(|v| !v.is_empty()) {
+                    Some(omarchy) => {
+                        let mut dirs = Vec::new();
+                        if let Some(home) = std::env::var_os("HOME") {
+                            dirs.push(PathBuf::from(home).join(".config/omarchy/themed"));
+                        }
+                        dirs.push(PathBuf::from(omarchy).join("default/themed"));
+                        dirs
+                    }
+                    None => template_dirs,
+                }
+            } else {
+                template_dirs
+            };
             let request = Request {
                 name,
                 theme_dirs,
