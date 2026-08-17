@@ -1,0 +1,33 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: packaging tools
+        run: cargo install cargo-deb cargo-generate-rpm
+      - name: build
+        run: cargo build --release
+      - name: deb
+        run: cargo deb -p riso-cli --no-build
+      - name: rpm
+        run: cargo generate-rpm -p crates/riso-cli
+      - name: tarball
+        run: |
+          tar -C target/release -czf "riso-${GITHUB_REF_NAME}-x86_64-linux.tar.gz" riso
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/debian/*.deb
+            target/generate-rpm/*.rpm
+            riso-*.tar.gz

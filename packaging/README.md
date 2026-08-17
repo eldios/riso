@@ -6,8 +6,17 @@ compiled in.
 
 ## Arch
 
+From a release tag:
+
 ```bash
 cd packaging && makepkg -si
+```
+
+From the repository tip (and the only path while the repository is private,
+over ssh):
+
+```bash
+cd packaging && makepkg -sip PKGBUILD-git
 ```
 
 ## Debian, Ubuntu, Mint
@@ -33,6 +42,21 @@ artifact. Copy `target/release/riso`, `docs/riso.1`, `LICENSE`, `NOTICE` and
 
 On a distribution whose rpm is not installed under `/usr`, add
 `--define "_prefix /usr"`.
+
+## Release artifacts
+
+Every `v*` tag builds the `.deb`, the `.rpm` and a binary tarball and
+attaches them to the GitHub release. On a machine with `gh`:
+
+```bash
+gh release download --repo eldios/riso --pattern '*.deb'
+sudo dpkg -i riso_*.deb
+```
+
+```bash
+gh release download --repo eldios/riso --pattern '*.rpm'
+sudo rpm -i riso-*.rpm
+```
 
 ## Nix
 

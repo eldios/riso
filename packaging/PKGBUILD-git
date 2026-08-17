@@ -1,0 +1,46 @@
+# Maintainer: Emanuele Calo <emanuele.lele.calo@gmail.com>
+# The development package: builds the tip of the repository. While the
+# repository is private the source goes over ssh; swap in the https URL once
+# it is public. The release PKGBUILD next to this one builds from tags.
+pkgname=riso-git
+pkgver=r0
+pkgrel=1
+pkgdesc="Modular ricing framework: renders themes into the files a desktop reads"
+arch=('x86_64' 'aarch64')
+url="https://github.com/eldios/riso"
+license=('MIT')
+depends=('git' 'curl')
+makedepends=('cargo' 'git')
+provides=('riso')
+conflicts=('riso')
+source=("riso::git+ssh://git@github.com/eldios/riso.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd riso
+  printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  cd riso
+  cargo fetch --locked
+}
+
+build() {
+  cd riso
+  cargo build --release --frozen
+}
+
+check() {
+  cd riso
+  cargo test --release --frozen
+}
+
+package() {
+  cd riso
+  install -Dm755 "target/release/riso" "$pkgdir/usr/bin/riso"
+  install -Dm644 "docs/riso.1" "$pkgdir/usr/share/man/man1/riso.1"
+  install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "NOTICE" "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+  install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
