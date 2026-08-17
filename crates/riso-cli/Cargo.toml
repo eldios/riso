@@ -28,6 +28,7 @@ assets = [
 ]
 
 [package.metadata.generate-rpm]
+name = "riso"
 requires = { git = "*", curl = "*" }
 assets = [
     { source = "target/release/riso", dest = "/usr/bin/riso", mode = "755" },
