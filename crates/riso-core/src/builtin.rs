@@ -76,6 +76,10 @@ pub const TEMPLATES: &[Builtin] = &[
         source: include_str!("../templates/neovim.lua.tpl"),
     },
     Builtin {
+        name: "noctalia.json",
+        source: include_str!("../templates/noctalia.json.tpl"),
+    },
+    Builtin {
         name: "obsidian.css",
         source: include_str!("../templates/obsidian.css.tpl"),
     },
