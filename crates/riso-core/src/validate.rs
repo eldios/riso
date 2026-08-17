@@ -43,6 +43,10 @@ const BINARY_EXTENSIONS: &[&str] = &[
     "xz", "zst",
 ];
 
+/// Extensions that are documentation: read by people, loaded by nothing.
+/// A path or a directive quoted in prose cannot run.
+const DOC_EXTENSIONS: &[&str] = &["md", "markdown", "txt", "rst", "adoc"];
+
 /// Limits a catalog places on what it will carry.
 #[derive(Debug, Clone)]
 pub struct Limits {
@@ -198,7 +202,7 @@ fn walk(
         if is_runnable(&metadata) {
             findings.push(Finding::Runnable(relative(root, &path)));
         }
-        if !is_binary(&path) {
+        if !is_binary(&path) && !is_documentation(&path) {
             scan(root, &path, findings)?;
         }
     }
@@ -223,6 +227,25 @@ fn is_binary(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_documentation(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| DOC_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// A line that is a comment in the formats themes actually ship: CSS block
+/// continuations, C-style, Lua/SQL, ini. Hash comments are stripped by the
+/// caller. A comment cannot run, and directives quoted in comments were the
+/// bulk of the noise on real themes.
+fn is_comment(code: &str) -> bool {
+    code.starts_with('*')
+        || code.starts_with("/*")
+        || code.starts_with("//")
+        || code.starts_with("--")
+        || code.starts_with(';')
+}
+
 /// Read a file line by line looking for directives and escaping paths.
 fn scan(root: &Path, path: &Path, findings: &mut Vec<Finding>) -> Result<(), IoError> {
     let Ok(contents) = std::fs::read_to_string(path) else {
@@ -232,7 +255,10 @@ fn scan(root: &Path, path: &Path, findings: &mut Vec<Finding>) -> Result<(), IoE
 
     for (index, line) in contents.lines().enumerate() {
         let number = index + 1;
-        let code = line.split('#').next().unwrap_or(line);
+        let code = line.split('#').next().unwrap_or(line).trim_start();
+        if is_comment(code) {
+            continue;
+        }
 
         if let Some(word) = dangerous_word(code) {
             findings.push(Finding::Directive {
@@ -253,15 +279,39 @@ fn scan(root: &Path, path: &Path, findings: &mut Vec<Finding>) -> Result<(), IoE
     Ok(())
 }
 
-/// The first dangerous word appearing as a whole token on the line.
+/// The first dangerous word in a position where a consumer would obey it.
+///
+/// Every format that has these directives puts them where a statement
+/// starts: at the head of the line (`source =`, `exec x`), right after `=`
+/// (mako's `on-button-left=exec ...`), as a field in hyprlang's
+/// comma-separated `bindd = KEY, description, exec, command`, or after a
+/// shell chain (`&& source "$CONFIG"`). The same word inside a quoted
+/// string or glued to a dot (`"exec":`, `source.json`) is data - vscode
+/// scope names alone produced dozens of false refusals on real themes.
 ///
 /// Case-sensitive on purpose: the directives are lowercase in every format
 /// that has them, and a capitalized "Include" is data, a highlight group in
 /// a colorscheme being the case that taught us.
 fn dangerous_word(line: &str) -> Option<String> {
-    line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
-        .find(|token| DANGEROUS_WORDS.contains(token))
-        .map(|token| token.to_owned())
+    let starts = std::iter::once(0).chain(
+        line.match_indices(['=', ',', '&', ';', '|'])
+            .map(|(i, _)| i + 1),
+    );
+    for start in starts {
+        let rest = line[start..].trim_start();
+        for word in DANGEROUS_WORDS {
+            if let Some(after) = rest.strip_prefix(word) {
+                let boundary = after
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !(c.is_ascii_alphanumeric() || "-_.".contains(c)));
+                if boundary {
+                    return Some((*word).to_owned());
+                }
+            }
+        }
+    }
+    None
 }
 
 /// A path that climbs out of the theme, or reaches into the home directory.
@@ -370,6 +420,75 @@ mod tests {
         .expect("write");
 
         assert_eq!(findings(&path), vec![], "directives are lowercase");
+    }
+
+    #[test]
+    fn quoted_scope_names_are_data_not_directives() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = theme(dir.path());
+        // The exact shapes that flooded install on real themes: vscode
+        // textmate scopes and waybar's exec key, all inside JSON strings.
+        std::fs::write(
+            path.join("vscode.json"),
+            concat!(
+                "\"scope\": [\"source.json meta.structure.dictionary.json\"],\n",
+                "\"source.css support.type.property-name\",\n",
+                "\"meta.preprocessor.include.c\",\n",
+            ),
+        )
+        .expect("write");
+
+        assert_eq!(findings(&path), vec![], "quoted strings cannot run");
+    }
+
+    #[test]
+    fn comments_and_documentation_cannot_run() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = theme(dir.path());
+        std::fs::write(
+            path.join("vencord.theme.css"),
+            " * @source https://example.com/theme.css\n",
+        )
+        .expect("write");
+        std::fs::write(
+            path.join("neovim.lua"),
+            "-- groups if enabled by plugin config\n",
+        )
+        .expect("write");
+        std::fs::write(
+            path.join("README.md"),
+            "Copy ~/.config/x/theme.css to ~/.config/Vencord/themes/ and source it.\n",
+        )
+        .expect("write");
+
+        assert_eq!(findings(&path), vec![]);
+    }
+
+    #[test]
+    fn statement_position_directives_are_still_caught() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = theme(dir.path());
+        std::fs::write(
+            path.join("mako.ini"),
+            "on-button-left=exec sh -c 'dismiss'\ninclude=~/.local/share/omarchy/default/mako/core.ini\n",
+        )
+        .expect("write");
+        std::fs::write(
+            path.join("weather.sh"),
+            "[[ -f \"$CONFIG\" ]] && source \"$CONFIG\"\n",
+        )
+        .expect("write");
+
+        let words: Vec<_> = findings(&path)
+            .into_iter()
+            .filter_map(|f| match f {
+                Finding::Directive { word, .. } => Some(word),
+                _ => None,
+            })
+            .collect();
+        assert!(words.contains(&"exec".to_owned()));
+        assert!(words.contains(&"include".to_owned()));
+        assert!(words.contains(&"source".to_owned()));
     }
 
     #[test]

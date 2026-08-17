@@ -399,16 +399,15 @@ fn run_theme(action: ThemeAction) -> Result<(), String> {
 
             // The same gate the catalog runs, because this theme may never
             // have passed through one: a clone straight from a git URL is
-            // exactly the case the client-side check exists for.
+            // exactly the case the client-side check exists for. Only the
+            // findings that make a theme unsafe matter here; catalog policy
+            // (license, size) belongs to `theme validate` and the CI that
+            // runs it.
             let findings = riso_core::validate::validate(&path, &Default::default())
                 .map_err(|e| e.to_string())?;
             let fatal = findings.iter().filter(|f| f.is_fatal()).count();
-            for finding in &findings {
-                eprintln!(
-                    "riso: {} {}",
-                    if finding.is_fatal() { "REFUSE" } else { "warn" },
-                    finding.describe()
-                );
+            for finding in findings.iter().filter(|f| f.is_fatal()) {
+                eprintln!("riso: REFUSE {name}: {}", finding.describe());
             }
             if fatal > 0 && !trust {
                 let _ = std::fs::remove_dir_all(&path);
