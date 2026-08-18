@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,5 +33,10 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Tue Aug 18 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.2.0-1
+- Noctalia palette joins the builtin templates
+- Theme validation only flags directives in statement position
+- The rpm package is named riso
+
 * Sun Aug 16 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.1.0-1
 - First packaged release
