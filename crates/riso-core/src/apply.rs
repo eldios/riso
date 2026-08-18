@@ -198,6 +198,15 @@ pub fn apply(request: &Request, exec: &dyn Executor) -> Result<Applied, ApplyErr
             request.shell_config.as_deref(),
             exec,
         )?;
+        // A desktop that draws its own wallpaper repaints it only when told:
+        // handing over the palette retints the shell, it does not change the
+        // image. Best effort, like every other consumer of the theme.
+        if let Some(image) = &applied.background {
+            let _ = request
+                .desktop
+                .set_background(exec, image, request.shell_config.as_deref());
+        }
+        request.desktop.post_apply(exec);
     }
 
     if request.parts.hooks {
@@ -544,6 +553,28 @@ mod tests {
     }
 
     #[test]
+    fn a_theme_switch_hands_over_wallpaper_and_runs_the_retint_hooks() {
+        let f = fixture();
+        write(&f.system.join("tokyo-night/backgrounds/1-night.png"), "png");
+        let recorder = RecordingExecutor::default();
+
+        let applied = apply(&request(&f, "tokyo-night"), &recorder).expect("apply");
+
+        assert!(applied.background.is_some());
+        let calls = recorder.calls();
+        assert!(
+            calls.iter().any(|c| c.contains("background set")),
+            "the shell was never told about the wallpaper: {calls:?}"
+        );
+        assert!(
+            calls
+                .iter()
+                .any(|c| c.trim_end() == "omarchy-restart-terminal"),
+            "the retint hooks did not run: {calls:?}"
+        );
+    }
+
+    #[test]
     fn leaves_no_staging_directory_behind() {
         let f = fixture();
         apply(&request(&f, "tokyo-night"), &RecordingExecutor::default()).expect("apply");
@@ -602,10 +633,9 @@ mod tests {
         apply(&request(&f, "tokyo-night"), &recorder).expect("apply");
 
         let calls = recorder.calls();
-        assert_eq!(calls.len(), 1);
         assert!(
             calls[0].starts_with("omarchy-shell shell applyTheme "),
-            "unexpected call: {}",
+            "the palette handover must come first: {}",
             calls[0]
         );
         // colors.toml is copied from the theme, so its payload is never empty.

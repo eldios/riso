@@ -124,6 +124,37 @@ impl Desktop {
         }
     }
 
+    /// Run the desktop's own after-theme hooks, when it has any.
+    ///
+    /// Omarchy retints applications through named helper commands, and its
+    /// own theme pipeline runs this same list after a switch. Each is best
+    /// effort: a helper this installation does not carry is not an error,
+    /// and one that fails does not stop the rest.
+    pub fn post_apply(self, exec: &dyn Executor) {
+        if self != Self::Omarchy {
+            return;
+        }
+        const OMARCHY_POST_APPLY: &[&str] = &[
+            "omarchy-restart-terminal",
+            "omarchy-restart-hyprctl",
+            "omarchy-restart-btop",
+            "omarchy-restart-opencode",
+            "omarchy-restart-helix",
+            "omarchy-theme-set-foot",
+            "omarchy-theme-set-tmux",
+            "omarchy-theme-set-gnome",
+            "omarchy-theme-set-pi",
+            "omarchy-theme-set-claude",
+            "omarchy-theme-set-browser",
+            "omarchy-theme-set-vscode",
+            "omarchy-theme-set-obsidian",
+            "omarchy-theme-set-keyboard",
+        ];
+        for hook in OMARCHY_POST_APPLY {
+            let _ = exec.run(hook, &[]);
+        }
+    }
+
     /// Hand the desktop a new wallpaper.
     ///
     /// Only Omarchy draws its own: a bare compositor leaves wallpapers to
@@ -299,6 +330,20 @@ mod tests {
         Desktop::Hyprland
             .set_background(&recorder, std::path::Path::new("/b/img.png"), None)
             .expect("set");
+        assert!(recorder.calls().is_empty());
+    }
+
+    #[test]
+    fn omarchy_runs_its_retint_hooks_and_nobody_else_does() {
+        let recorder = RecordingExecutor::default();
+        Desktop::Omarchy.post_apply(&recorder);
+        let calls = recorder.calls();
+        let ran = |name: &str| calls.iter().any(|c| c.trim_end() == name);
+        assert!(ran("omarchy-restart-terminal"));
+        assert!(ran("omarchy-theme-set-vscode"));
+
+        let recorder = RecordingExecutor::default();
+        Desktop::Hyprland.post_apply(&recorder);
         assert!(recorder.calls().is_empty());
     }
 
