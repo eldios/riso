@@ -283,16 +283,17 @@ fn set_background(
     let chosen = match background::remembered(&request.state_dir, name) {
         Some(remembered) => remembered,
         None => {
-            let showing = background::current(&link_path);
-            let Some(first) = background::next(&images, showing.as_deref()) else {
+            // The first apply of a theme settles its wallpaper: what is
+            // already showing when it belongs to this theme, else the first
+            // image. Never an advance: applying is also what a boot and a
+            // shell switch do, and neither should shuffle the desktop.
+            // Moving through the images is what `backgrounds next` is for.
+            let showing = background::current(&link_path).filter(|s| images.contains(s));
+            let Some(settled) = showing.or_else(|| images.first().cloned()) else {
                 return Ok(None);
             };
-            // The first apply of a theme settles its wallpaper. Applying is
-            // not only how a theme is chosen: a shell switch re-applies to
-            // retint the new shell, and that must not shuffle the desktop.
-            // Advancing through a theme's images is what `bg next` is for.
-            let _ = background::remember(&request.state_dir, name, &first);
-            first
+            let _ = background::remember(&request.state_dir, name, &settled);
+            settled
         }
     };
     background::link(&link_path, &chosen)?;
@@ -597,7 +598,7 @@ mod tests {
         }
         let chosen = f.state.join("current/theme/backgrounds/3-dusk.png");
 
-        // First apply takes the first image and settles on it.
+        // First apply settles on the first image, nothing being on show.
         let first = apply(&request(&f, "tokyo-night"), &RecordingExecutor::default())
             .expect("apply")
             .background
@@ -619,6 +620,30 @@ mod tests {
             .background
             .expect("a background");
         assert_eq!(again, chosen);
+    }
+
+    #[test]
+    fn first_apply_keeps_the_wallpaper_already_on_show() {
+        let f = fixture();
+        for name in ["1-night.png", "2-dawn.png"] {
+            write(&f.system.join("tokyo-night/backgrounds").join(name), "png");
+        }
+        // What a boot finds: the link points at an image of this theme in
+        // the rendered state, but no choice is on record yet.
+        let showing = f.state.join("current/theme/backgrounds/2-dawn.png");
+        let link = f.state.join("current/background");
+        std::fs::create_dir_all(link.parent().unwrap()).expect("mkdir");
+        background::link(&link, &showing).expect("link");
+
+        let applied = apply(&request(&f, "tokyo-night"), &RecordingExecutor::default())
+            .expect("apply")
+            .background
+            .expect("a background");
+        assert!(
+            applied.ends_with("2-dawn.png"),
+            "the boot shuffled the wallpaper: {}",
+            applied.display()
+        );
     }
 
     #[test]

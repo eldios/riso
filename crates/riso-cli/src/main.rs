@@ -42,7 +42,7 @@ enum Command {
         action: ThemeAction,
     },
     /// Change the wallpaper: the link, and the desktop that draws it
-    #[command(name = "backgrounds", visible_aliases = ["bg", "b"])]
+    #[command(name = "backgrounds", visible_alias = "b")]
     Backgrounds {
         #[command(subcommand)]
         action: BgAction,
