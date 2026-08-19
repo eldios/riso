@@ -275,10 +275,20 @@ fn set_background(
 
     let images = background::candidates(&dirs);
     let link_path = current.join(BACKGROUND_LINK);
-    let showing = background::current(&link_path);
 
-    let Some(chosen) = background::next(&images, showing.as_deref()) else {
-        return Ok(None);
+    // A theme the user has already picked a wallpaper for gets that one back,
+    // which is what makes a theme a look rather than a lottery. Only a theme
+    // with no choice on record cycles, so a second apply still moves through
+    // the images a theme ships with.
+    let chosen = match background::remembered(&request.state_dir, name) {
+        Some(remembered) => remembered,
+        None => {
+            let showing = background::current(&link_path);
+            let Some(next) = background::next(&images, showing.as_deref()) else {
+                return Ok(None);
+            };
+            next
+        }
     };
     background::link(&link_path, &chosen)?;
     Ok(Some(chosen))
@@ -572,6 +582,45 @@ mod tests {
                 .any(|c| c.trim_end() == "omarchy-restart-terminal"),
             "the retint hooks did not run: {calls:?}"
         );
+    }
+
+    #[test]
+    fn a_theme_comes_back_to_the_wallpaper_it_was_left_on() {
+        let f = fixture();
+        for name in ["1-night.png", "2-dawn.png", "3-dusk.png"] {
+            write(&f.system.join("tokyo-night/backgrounds").join(name), "png");
+        }
+        let chosen = f.state.join("current/theme/backgrounds/3-dusk.png");
+
+        // First apply takes the first image, as a theme nobody has chosen for.
+        let first = apply(&request(&f, "tokyo-night"), &RecordingExecutor::default())
+            .expect("apply")
+            .background
+            .expect("a background");
+        assert!(first.ends_with("1-night.png"), "{}", first.display());
+
+        background::remember(&f.state, "tokyo-night", &chosen).expect("remember");
+
+        // Applying again honours the choice instead of advancing the list.
+        let again = apply(&request(&f, "tokyo-night"), &RecordingExecutor::default())
+            .expect("apply")
+            .background
+            .expect("a background");
+        assert_eq!(again, chosen);
+    }
+
+    #[test]
+    fn a_remembered_wallpaper_that_is_gone_does_not_strand_the_theme() {
+        let f = fixture();
+        write(&f.system.join("tokyo-night/backgrounds/1-night.png"), "png");
+        background::remember(&f.state, "tokyo-night", Path::new("/gone/never-was.png"))
+            .expect("remember");
+
+        let applied = apply(&request(&f, "tokyo-night"), &RecordingExecutor::default())
+            .expect("apply")
+            .background
+            .expect("a background");
+        assert!(applied.ends_with("1-night.png"), "{}", applied.display());
     }
 
     #[test]

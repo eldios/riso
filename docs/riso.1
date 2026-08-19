@@ -61,6 +61,9 @@ The desktop that draws its own wallpaper is told; a bare compositor is not,
 because the daemon that paints for it is not
 .BR riso 's
 to guess.
+A chosen wallpaper is recorded against the theme showing it, so returning to
+that theme returns to that image. A theme never chosen for starts at the
+first image its directory holds and advances on each apply.
 .TP
 .B "carousel [themes|backgrounds]"
 A full-screen strip of previews to pick from. Runs on

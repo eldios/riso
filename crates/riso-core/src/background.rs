@@ -10,6 +10,9 @@ use crate::error::IoError;
 
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "bmp", "webp"];
 
+/// Directory under the state tree holding one file per theme.
+const CHOICES_DIR: &str = "backgrounds";
+
 /// Images available for a theme, sorted, from every directory that has any.
 pub fn candidates(dirs: &[PathBuf]) -> Vec<PathBuf> {
     let mut images: Vec<PathBuf> = dirs
@@ -47,6 +50,37 @@ pub fn next(images: &[PathBuf], current: Option<&Path>) -> Option<PathBuf> {
         .map(|position| (position + 1) % images.len())
         .unwrap_or(0);
     images.get(index).cloned()
+}
+
+/// Where the chosen wallpaper of a theme is recorded.
+///
+/// One file per theme, holding a path. A theme the user never chose for has
+/// no file, which is what tells the caller to fall back to cycling.
+fn memory_path(state: &Path, theme: &str) -> PathBuf {
+    state.join(CHOICES_DIR).join(theme)
+}
+
+/// The wallpaper this theme was last set to, if it is still there.
+///
+/// A remembered image that has since been deleted is no answer at all: the
+/// caller cycles instead of pointing the desktop at nothing.
+pub fn remembered(state: &Path, theme: &str) -> Option<PathBuf> {
+    let recorded = std::fs::read_to_string(memory_path(state, theme)).ok()?;
+    let path = PathBuf::from(recorded.trim());
+    path.is_file().then_some(path)
+}
+
+/// Record that this theme is showing `image`.
+///
+/// Best effort by contract: the wallpaper is already on screen by the time
+/// this runs, and failing to write a note is not worth undoing that.
+pub fn remember(state: &Path, theme: &str, image: &Path) -> Result<(), IoError> {
+    let path = memory_path(state, theme);
+    let parent = path
+        .parent()
+        .ok_or_else(|| IoError::NoParent(path.clone()))?;
+    std::fs::create_dir_all(parent).map_err(|e| IoError::Write(parent.into(), e))?;
+    crate::atomic::write_atomic(&path, &format!("{}\n", image.display()))
 }
 
 /// Point `link` at `target`, replacing whatever it pointed at.

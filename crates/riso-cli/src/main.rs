@@ -730,6 +730,13 @@ fn state_or_default(state: Option<PathBuf>) -> Result<PathBuf, String> {
 
 /// Point the current-background link at `image` and tell the desktop that
 /// draws its own wallpaper.
+/// The theme in use, as the state tree records it.
+fn current_theme_name(state: &Path) -> Option<String> {
+    let name = std::fs::read_to_string(state.join("current/theme.name")).ok()?;
+    let name = name.trim();
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
 fn set_background(image: &Path, state: &Path, no_reload: bool) -> Result<(), String> {
     let image = std::fs::canonicalize(image).map_err(|e| format!("{}: {e}", image.display()))?;
     if !image.is_file() {
@@ -738,6 +745,12 @@ fn set_background(image: &Path, state: &Path, no_reload: bool) -> Result<(), Str
 
     let link = state.join("current/background");
     riso_core::background::link(&link, &image).map_err(|e| e.to_string())?;
+
+    // Record the pick against the theme showing it, so returning to that
+    // theme returns to this image instead of starting its list over.
+    if let Some(theme) = current_theme_name(state) {
+        let _ = riso_core::background::remember(state, &theme, &image);
+    }
 
     if !no_reload {
         let desktop = Desktop::detect();
