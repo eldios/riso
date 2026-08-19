@@ -18,7 +18,7 @@ use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::{Resize, StatefulImage};
 
-use crate::data::{self, What};
+use crate::data::{self, Purpose, What};
 
 /// What the user picked, if anything.
 enum Exit {
@@ -26,7 +26,7 @@ enum Exit {
     Quit,
 }
 
-pub fn run(what: What, state: Option<std::path::PathBuf>) -> Result<(), String> {
+pub fn run(what: What, purpose: Purpose, state: Option<std::path::PathBuf>) -> Result<(), String> {
     if !std::io::stdout().is_terminal() {
         return Err("--tui needs a terminal; use --gui or pass a value".to_owned());
     }
@@ -38,11 +38,15 @@ pub fn run(what: What, state: Option<std::path::PathBuf>) -> Result<(), String> 
     let rows = match what {
         What::Themes => data::theme_rows(),
         What::Backgrounds => data::background_rows(&state),
+        What::Catalog => {
+            data::catalog_rows(&riso_core::reload::ProcessExecutor, crate::DEFAULT_CATALOG)
+        }
     };
     if rows.is_empty() {
         return Err(match what {
             What::Themes => "no themes installed".to_owned(),
             What::Backgrounds => "the current theme ships no backgrounds".to_owned(),
+            What::Catalog => "the catalog is empty or unreachable".to_owned(),
         });
     }
     let current = match what {
@@ -50,6 +54,7 @@ pub fn run(what: What, state: Option<std::path::PathBuf>) -> Result<(), String> 
         What::Backgrounds => {
             data::current_background(&state).map(|p| p.to_string_lossy().into_owned())
         }
+        What::Catalog => None,
     };
 
     // A terminal that answers the capability query gets real images; one
@@ -58,13 +63,37 @@ pub fn run(what: What, state: Option<std::path::PathBuf>) -> Result<(), String> 
 
     let mut terminal = ratatui::init();
     drain_pending_input();
-    let outcome = browse(&mut terminal, &picker, &rows, current.as_deref(), what);
+    let outcome = browse(
+        &mut terminal,
+        &picker,
+        &rows,
+        current.as_deref(),
+        what,
+        purpose,
+    );
     ratatui::restore();
 
     match outcome? {
         Exit::Quit => Ok(()),
-        Exit::Chosen(value) => apply(what, &value, &state),
+        Exit::Chosen(value) => match purpose {
+            Purpose::Browse => Ok(()),
+            Purpose::Apply => apply(what, &value, &state),
+            Purpose::Install => install(&value),
+        },
     }
+}
+
+/// Install a catalog pick through this same binary, gate and all.
+fn install(name: &str) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let status = std::process::Command::new(exe)
+        .args(["theme", "install", name])
+        .status()
+        .map_err(|e| e.to_string())?;
+    status
+        .success()
+        .then_some(())
+        .ok_or_else(|| "installing the pick failed".to_owned())
 }
 
 /// Swallow whatever is already buffered on the tty.
@@ -86,6 +115,7 @@ fn browse(
     rows: &[data::Row],
     current: Option<&str>,
     what: What,
+    purpose: Purpose,
 ) -> Result<Exit, String> {
     // The capability handshake above can leave the terminal's answers
     // dribbling in past the drain, and crossterm degrades an unfinished
@@ -121,9 +151,12 @@ fn browse(
 
         terminal
             .draw(|frame| {
-                let title = match what {
-                    What::Themes => " riso - themes ",
-                    What::Backgrounds => " riso - backgrounds ",
+                let title = match (what, purpose) {
+                    (What::Catalog, _) => " riso - catalog ",
+                    (What::Themes, Purpose::Browse) => " riso - themes (browsing) ",
+                    (What::Themes, _) => " riso - themes ",
+                    (What::Backgrounds, Purpose::Browse) => " riso - backgrounds (browsing) ",
+                    (What::Backgrounds, _) => " riso - backgrounds ",
                 };
                 let [image_area, name_area, hint_area] = Layout::vertical([
                     Constraint::Fill(1),
@@ -162,7 +195,12 @@ fn browse(
                 frame.render_widget(Paragraph::new(name).alignment(Alignment::Center), name_area);
 
                 let hints = if filter.is_empty() {
-                    "type to filter - arrows move - Enter applies - Esc quits".to_owned()
+                    let action = match purpose {
+                        Purpose::Apply => "Enter applies",
+                        Purpose::Browse => "Enter does nothing",
+                        Purpose::Install => "Enter installs",
+                    };
+                    format!("type to filter - arrows move - {action} - Esc quits")
                 } else {
                     format!("filter: {filter}  (Backspace edits, Esc clears)")
                 };
@@ -196,7 +234,7 @@ fn browse(
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         return Ok(Exit::Quit)
                     }
-                    KeyCode::Enter if !shown.is_empty() => {
+                    KeyCode::Enter if purpose != Purpose::Browse && !shown.is_empty() => {
                         return Ok(Exit::Chosen(rows[selected].value.clone()))
                     }
                     KeyCode::Left | KeyCode::Up if !shown.is_empty() => {
@@ -231,6 +269,8 @@ fn apply(what: What, value: &str, state: &std::path::Path) -> Result<(), String>
     let (env, fallback_arg) = match what {
         What::Themes => ("RISO_CAROUSEL_APPLY", "theme"),
         What::Backgrounds => ("RISO_CAROUSEL_APPLY_BG", "backgrounds"),
+        // Catalog picks install, and never through apply.
+        What::Catalog => return install(value),
     };
 
     if let Ok(command) = std::env::var(env) {

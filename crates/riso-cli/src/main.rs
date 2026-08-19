@@ -79,7 +79,7 @@ enum Command {
     /// Rows for the pickers: label, preview and value, tab-separated
     #[command(hide = true)]
     CarouselData {
-        #[arg(value_parser = ["themes", "backgrounds"])]
+        #[arg(value_parser = ["themes", "backgrounds", "catalog"])]
         what: String,
         /// Print what is current instead of the rows
         #[arg(long)]
@@ -182,12 +182,25 @@ enum ThemeAction {
         /// Theme directory; repeat for more
         #[arg(long = "themes", value_name = "DIR")]
         theme_dirs: Vec<PathBuf>,
+        /// Browse previews in the full-screen carousel, read-only
+        #[arg(long, conflicts_with = "tui")]
+        gui: bool,
+        /// Browse previews in the terminal, read-only
+        #[arg(long)]
+        tui: bool,
     },
     /// Install a theme from the catalog or from any git repository
     #[command(visible_alias = "i")]
     Install {
-        /// Theme name in the catalog, or a git URL
-        source: String,
+        /// Theme name in the catalog, or a git URL. Omit it to browse the
+        /// catalog with --gui or --tui.
+        source: Option<String>,
+        /// Browse the catalog in the full-screen carousel; Enter installs
+        #[arg(long, conflicts_with_all = ["source", "tui"])]
+        gui: bool,
+        /// Browse the catalog in the terminal; Enter installs
+        #[arg(long, conflicts_with = "source")]
+        tui: bool,
         /// Where to install; defaults to the user theme directory
         #[arg(long, value_name = "DIR")]
         into: Option<PathBuf>,
@@ -199,6 +212,21 @@ enum ThemeAction {
         name: Option<String>,
         /// Keep a theme the safety check would refuse. The findings still
         /// print; accepting them is on you.
+        #[arg(long)]
+        trust: bool,
+    },
+    /// Update installed themes from where they came from
+    #[command(visible_alias = "u")]
+    Update {
+        /// One theme instead of all of them
+        name: Option<String>,
+        /// Where themes were installed; defaults to the user theme directory
+        #[arg(long, value_name = "DIR")]
+        into: Option<PathBuf>,
+        /// Catalog index that pins revisions for the themes it carries
+        #[arg(long, value_name = "URL", default_value = DEFAULT_CATALOG)]
+        catalog: String,
+        /// Keep an update the safety check would refuse
         #[arg(long)]
         trust: bool,
     },
@@ -363,7 +391,7 @@ fn run_plugin(action: PluginAction, output: OutputFormat) -> Result<(), String> 
 }
 
 /// Where `theme install` puts things, and the first place `set` looks.
-const DEFAULT_CATALOG: &str =
+pub(crate) const DEFAULT_CATALOG: &str =
     "https://raw.githubusercontent.com/eldios/riso-themes/main/index.json";
 
 fn home_dir() -> Result<PathBuf, String> {
@@ -413,10 +441,10 @@ fn run_theme(action: ThemeAction, output: OutputFormat) -> Result<(), String> {
             plugin_dirs,
         } => {
             if gui {
-                return gui::run(data::What::Themes);
+                return gui::run(data::What::Themes, data::Purpose::Apply);
             }
             if tui {
-                return tui::run(data::What::Themes, state);
+                return tui::run(data::What::Themes, data::Purpose::Apply, state);
             }
             let Some(name) = name else {
                 return Err("a theme name is needed, or --gui/--tui to pick one".to_owned());
@@ -536,7 +564,17 @@ fn run_theme(action: ThemeAction, output: OutputFormat) -> Result<(), String> {
                 None => Err("no theme is applied".to_owned()),
             }
         }
-        ThemeAction::List { theme_dirs } => {
+        ThemeAction::List {
+            theme_dirs,
+            gui,
+            tui,
+        } => {
+            if gui {
+                return gui::run(data::What::Themes, data::Purpose::Browse);
+            }
+            if tui {
+                return tui::run(data::What::Themes, data::Purpose::Browse, None);
+            }
             let user = user_theme_dir()?;
             let mut dirs = if theme_dirs.is_empty() {
                 // installed() lets the first occurrence win, the reverse of
@@ -584,11 +622,24 @@ fn run_theme(action: ThemeAction, output: OutputFormat) -> Result<(), String> {
         }
         ThemeAction::Install {
             source,
+            gui,
+            tui,
             into,
             catalog: index_url,
             name,
             trust,
         } => {
+            if gui {
+                return gui::run(data::What::Catalog, data::Purpose::Install);
+            }
+            if tui {
+                return tui::run(data::What::Catalog, data::Purpose::Install, None);
+            }
+            let Some(source) = source else {
+                return Err(
+                    "a theme name or git URL is needed, or --gui/--tui to browse".to_owned(),
+                );
+            };
             let into = match into {
                 Some(dir) => dir,
                 None => user_theme_dir()?,
@@ -653,6 +704,111 @@ fn run_theme(action: ThemeAction, output: OutputFormat) -> Result<(), String> {
                 &serde_json::json!({ "installed": name, "path": path }),
             )? {
                 println!("installed {name} to {}", path.display());
+            }
+            Ok(())
+        }
+        ThemeAction::Update {
+            name,
+            into,
+            catalog: index_url,
+            trust,
+        } => {
+            let into = match into {
+                Some(dir) => dir,
+                None => user_theme_dir()?,
+            };
+            // The catalog is a hint, not a gate: a theme it does not carry
+            // updates from its own origin. Failing to fetch it only means
+            // no revisions are pinned.
+            let index = catalog::fetch_index(&ProcessExecutor, &index_url).ok();
+
+            let mut targets: Vec<PathBuf> = Vec::new();
+            match &name {
+                Some(name) => {
+                    let path = into.join(name);
+                    if !path.is_dir() {
+                        return Err(format!("nothing named '{name}' is installed"));
+                    }
+                    targets.push(path);
+                }
+                None => {
+                    for theme in catalog::installed(std::slice::from_ref(&into), Some(&into)) {
+                        targets.push(theme.path);
+                    }
+                }
+            }
+
+            let mut report = Vec::new();
+            for path in targets {
+                let theme = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let rev = index
+                    .as_ref()
+                    .and_then(|i| i.find(&theme))
+                    .and_then(|e| e.rev.as_deref().map(str::to_owned));
+                let outcome =
+                    match catalog::update_from_git(&ProcessExecutor, &path, rev.as_deref()) {
+                        Ok(outcome) => outcome,
+                        Err(error) => {
+                            eprintln!("riso: {theme}: {error}");
+                            report.push(serde_json::json!({ "theme": theme, "result": "failed" }));
+                            continue;
+                        }
+                    };
+                let result = match outcome {
+                    catalog::Updated::NotAClone => {
+                        serde_json::json!({ "theme": theme, "result": "no git history" })
+                    }
+                    catalog::Updated::Current => {
+                        serde_json::json!({ "theme": theme, "result": "up to date" })
+                    }
+                    catalog::Updated::Moved { from, to } => {
+                        // What arrived passes the same gate an install does;
+                        // an update that turns a theme into a program goes
+                        // back to the revision that was trusted.
+                        let findings = riso_core::validate::validate(&path, &Default::default())
+                            .map_err(|e| e.to_string())?;
+                        let fatal = findings.iter().filter(|f| f.is_fatal()).count();
+                        for finding in findings.iter().filter(|f| f.is_fatal()) {
+                            eprintln!("riso: REFUSE {theme}: {}", finding.describe());
+                        }
+                        if fatal > 0 && !trust {
+                            catalog::rollback(&ProcessExecutor, &path, &from)
+                                .map_err(|e| e.to_string())?;
+                            eprintln!(
+                                "riso: {theme}: update refused ({fatal} finding(s)), kept {}",
+                                &from[..from.len().min(7)]
+                            );
+                            serde_json::json!({ "theme": theme, "result": "refused" })
+                        } else {
+                            serde_json::json!({
+                                "theme": theme,
+                                "result": "updated",
+                                "from": from,
+                                "to": to,
+                            })
+                        }
+                    }
+                };
+                report.push(result);
+            }
+
+            if !emit(output, &report)? {
+                for entry in &report {
+                    let theme = entry["theme"].as_str().unwrap_or_default();
+                    match entry["result"].as_str().unwrap_or_default() {
+                        "updated" => println!(
+                            "updated {theme} ({} -> {})",
+                            &entry["from"].as_str().unwrap_or_default()
+                                [..entry["from"].as_str().map_or(0, |s| s.len().min(7))],
+                            &entry["to"].as_str().unwrap_or_default()
+                                [..entry["to"].as_str().map_or(0, |s| s.len().min(7))]
+                        ),
+                        other => println!("{theme}: {other}"),
+                    }
+                }
             }
             Ok(())
         }
@@ -990,10 +1146,10 @@ fn run_bg(action: BgAction, output: OutputFormat) -> Result<(), String> {
             no_reload,
         } => {
             if gui {
-                return gui::run(data::What::Backgrounds);
+                return gui::run(data::What::Backgrounds, data::Purpose::Apply);
             }
             if tui {
-                return tui::run(data::What::Backgrounds, state);
+                return tui::run(data::What::Backgrounds, data::Purpose::Apply, state);
             }
             let Some(image) = image else {
                 return Err("an image is needed, or --gui/--tui to pick one".to_owned());
@@ -1073,6 +1229,7 @@ fn run_carousel_data(what: &str, current: bool) -> Result<(), String> {
 
     let rows = match what {
         "backgrounds" => data::background_rows(&state),
+        "catalog" => data::catalog_rows(&ProcessExecutor, DEFAULT_CATALOG),
         _ => data::theme_rows(),
     };
     for row in rows {

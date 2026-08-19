@@ -48,10 +48,26 @@ Print the theme in use.
 .TP
 .B "theme list"
 List every theme found, marking those a package manager owns as read-only.
+With
+.B \-\-gui
+or
+.B \-\-tui
+the same pickers open read-only, for looking at previews without applying.
 .TP
-.BI "theme install " source
+.BI "theme install " "[source] [--gui|--tui]"
 Install from the catalog by name, or from any git URL. The theme is validated
-before it is kept.
+before it is kept. Without a source,
+.B \-\-gui
+and
+.B \-\-tui
+browse the catalog with previews, and Enter installs the pick through the
+same gate.
+.TP
+.BI "theme update " [name]
+Bring installed themes to where they came from: the revision the catalog
+pins for themes it carries, the origin's tip for the rest. What arrives
+passes the same safety gate an install does; an update that fails it is
+rolled back to the revision that was trusted.
 .TP
 .BI "theme validate " path
 Report anything that would make a theme unsafe to install.

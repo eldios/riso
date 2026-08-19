@@ -48,6 +48,9 @@ pub struct Entry {
     /// Reason the theme was withdrawn, if it was.
     #[serde(default)]
     pub yanked: Option<String>,
+    /// Image to show while browsing, when the catalog names one.
+    #[serde(default)]
+    pub preview: Option<String>,
 }
 
 /// A catalog index: a flat list of themes, published as static JSON.
@@ -270,6 +273,75 @@ pub fn install_from_git(
     Ok(destination)
 }
 
+/// What updating one theme came to.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Updated {
+    /// Moved from one revision to another.
+    Moved { from: String, to: String },
+    /// Already at the target revision.
+    Current,
+    /// Not a git clone, so there is nothing to pull from.
+    NotAClone,
+}
+
+/// Bring one installed theme to `rev`, or to its origin's tip without one.
+///
+/// The clone keeps its history, so the theme's own repository is the source
+/// of truth for where updates come from; the catalog only contributes the
+/// revision to pin when the theme came from it. The caller validates what
+/// arrived and calls back with `rollback` if it must not be kept.
+pub fn update_from_git(
+    exec: &dyn Executor,
+    theme_dir: &Path,
+    rev: Option<&str>,
+) -> Result<Updated, CatalogError> {
+    let dir = theme_dir.to_string_lossy().into_owned();
+    let git = |args: &[&str]| {
+        let mut full = vec!["-C".to_owned(), dir.clone()];
+        full.extend(args.iter().map(|a| (*a).to_owned()));
+        exec.capture("git", &full)
+    };
+
+    if !theme_dir.join(".git").exists() {
+        return Ok(Updated::NotAClone);
+    }
+    let from = git(&["rev-parse", "HEAD"])?.trim().to_owned();
+
+    match rev {
+        Some(rev) => {
+            // A pinned revision may be beyond a shallow clone's horizon.
+            git(&["fetch", "--quiet", "--unshallow", "origin"])
+                .or_else(|_| git(&["fetch", "--quiet", "origin"]))?;
+            git(&["checkout", "--quiet", rev])?;
+        }
+        None => {
+            git(&["fetch", "--quiet", "--depth=1", "origin", "HEAD"])?;
+            git(&["reset", "--quiet", "--hard", "FETCH_HEAD"])?;
+        }
+    }
+
+    let to = git(&["rev-parse", "HEAD"])?.trim().to_owned();
+    if from == to {
+        return Ok(Updated::Current);
+    }
+    Ok(Updated::Moved { from, to })
+}
+
+/// Put a theme back to the revision it was on before an update.
+pub fn rollback(exec: &dyn Executor, theme_dir: &Path, rev: &str) -> Result<(), CatalogError> {
+    exec.capture(
+        "git",
+        &[
+            "-C".to_owned(),
+            theme_dir.to_string_lossy().into_owned(),
+            "checkout".to_owned(),
+            "--quiet".to_owned(),
+            rev.to_owned(),
+        ],
+    )?;
+    Ok(())
+}
+
 /// Remove an installed theme, refusing anything riso does not own.
 pub fn remove(
     name: &str,
@@ -324,6 +396,70 @@ mod tests {
         let path = dir.join(name);
         std::fs::create_dir_all(&path).expect("mkdir");
         std::fs::write(path.join(PALETTE_FILE), "background = \"#000000\"\n").expect("write");
+    }
+
+    #[test]
+    fn updates_a_clone_and_rolls_it_back() {
+        use crate::reload::ProcessExecutor;
+        let exec = ProcessExecutor;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let origin = dir.path().join("origin");
+        std::fs::create_dir_all(&origin).expect("mkdir");
+        let git = |cwd: &Path, args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(cwd)
+                .args(args)
+                .env("GIT_AUTHOR_NAME", "t")
+                .env("GIT_AUTHOR_EMAIL", "t@t")
+                .env("GIT_COMMITTER_NAME", "t")
+                .env("GIT_COMMITTER_EMAIL", "t@t")
+                .output()
+                .expect("git");
+            assert!(out.status.success(), "{args:?}: {:?}", out);
+        };
+        git(&origin, &["init", "--quiet"]);
+        std::fs::write(origin.join("colors.toml"), "background = \"#000\"\n").expect("write");
+        git(&origin, &["add", "-A"]);
+        git(
+            &origin,
+            &["commit", "--quiet", "--no-gpg-sign", "-m", "one"],
+        );
+        let clone = dir.path().join("theme");
+        git(
+            dir.path(),
+            &["clone", "--quiet", origin.to_str().unwrap(), "theme"],
+        );
+        std::fs::write(origin.join("colors.toml"), "background = \"#fff\"\n").expect("write");
+        git(&origin, &["add", "-A"]);
+        git(
+            &origin,
+            &["commit", "--quiet", "--no-gpg-sign", "-m", "two"],
+        );
+
+        let updated = update_from_git(&exec, &clone, None).expect("update");
+        let Updated::Moved { from, to } = updated else {
+            panic!("expected a move, got {updated:?}");
+        };
+        assert_ne!(from, to);
+        assert_eq!(
+            update_from_git(&exec, &clone, None).expect("again"),
+            Updated::Current
+        );
+
+        rollback(&exec, &clone, &from).expect("rollback");
+        let head = std::process::Command::new("git")
+            .args(["-C", clone.to_str().unwrap(), "rev-parse", "HEAD"])
+            .output()
+            .expect("git");
+        assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), from);
+
+        let plain = dir.path().join("no-git-theme");
+        std::fs::create_dir_all(&plain).expect("mkdir");
+        assert_eq!(
+            update_from_git(&exec, &plain, None).expect("plain"),
+            Updated::NotAClone
+        );
     }
 
     #[test]

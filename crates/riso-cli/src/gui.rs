@@ -7,11 +7,11 @@
 
 use std::path::PathBuf;
 
-use crate::data::What;
+use crate::data::{Purpose, What};
 
 const CAROUSEL_QML: &str = include_str!("../../../carousel/shell.qml");
 
-pub fn run(what: What) -> Result<(), String> {
+pub fn run(what: What, purpose: Purpose) -> Result<(), String> {
     let exe = std::env::current_exe()
         .map_err(|e| e.to_string())?
         .to_string_lossy()
@@ -27,19 +27,35 @@ pub fn run(what: What) -> Result<(), String> {
     let (data, apply_env, default_apply, current) = match what {
         What::Backgrounds => (
             "backgrounds",
-            "RISO_CAROUSEL_APPLY_BG",
+            Some("RISO_CAROUSEL_APPLY_BG"),
             format!("{exe} backgrounds set"),
             "readlink -f \"${XDG_STATE_HOME:-$HOME/.local/state}/riso/current/background\""
                 .to_owned(),
         ),
         What::Themes => (
             "themes",
-            "RISO_CAROUSEL_APPLY",
+            Some("RISO_CAROUSEL_APPLY"),
             format!("{exe} theme set"),
             "cat \"${XDG_STATE_HOME:-$HOME/.local/state}/riso/current/theme.name\"".to_owned(),
         ),
+        // Installing goes through this binary always: the machine's apply
+        // wrapper carries themes to shells, which is not what a catalog
+        // pick means.
+        What::Catalog => (
+            "catalog",
+            None,
+            format!("{exe} theme install"),
+            "true".to_owned(),
+        ),
     };
-    let apply = std::env::var(apply_env).unwrap_or(default_apply);
+    let apply = match purpose {
+        // Looking must not run anything: the pick lands on a no-op.
+        Purpose::Browse => "true".to_owned(),
+        Purpose::Apply | Purpose::Install => apply_env
+            .and_then(|env| std::env::var(env).ok())
+            .filter(|command| !command.trim().is_empty())
+            .unwrap_or(default_apply),
+    };
 
     use std::os::unix::process::CommandExt;
     let error = std::process::Command::new("quickshell")

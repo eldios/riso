@@ -12,6 +12,18 @@ use riso_core::catalog;
 pub enum What {
     Themes,
     Backgrounds,
+    Catalog,
+}
+
+/// What picking an entry does.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Purpose {
+    /// Apply the pick to the desktop.
+    Apply,
+    /// Look, do not touch.
+    Browse,
+    /// Install the pick from the catalog.
+    Install,
 }
 
 pub struct Row {
@@ -66,6 +78,56 @@ pub fn current_theme(state: &Path) -> Option<String> {
     let name = std::fs::read_to_string(state.join("current/theme.name")).ok()?;
     let name = name.trim();
     (!name.is_empty()).then(|| name.to_owned())
+}
+
+/// The catalog's themes, one row each, with previews fetched best effort.
+///
+/// A preview that cannot be downloaded is simply absent: browsing a catalog
+/// must work on the index alone, and images arrive when they arrive. The
+/// cache keeps one file per theme, refreshed only when missing.
+pub fn catalog_rows(exec: &dyn riso_core::reload::Executor, index_url: &str) -> Vec<Row> {
+    let Ok(index) = catalog::fetch_index(exec, index_url) else {
+        return Vec::new();
+    };
+    let cache = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
+        .map(|base| base.join("riso/previews"));
+
+    index
+        .themes
+        .iter()
+        .filter(|entry| entry.yanked.is_none())
+        .map(|entry| Row {
+            label: entry.name.clone(),
+            preview: entry
+                .preview
+                .as_deref()
+                .zip(cache.as_deref())
+                .and_then(|(url, cache)| fetch_preview(url, cache, &entry.name)),
+            value: entry.name.clone(),
+        })
+        .collect()
+}
+
+fn fetch_preview(url: &str, cache: &Path, name: &str) -> Option<PathBuf> {
+    let extension = url
+        .rsplit('.')
+        .next()
+        .filter(|e| e.len() <= 4)
+        .unwrap_or("img");
+    let target = cache.join(format!("{name}.{extension}"));
+    if target.is_file() {
+        return Some(target);
+    }
+    std::fs::create_dir_all(cache).ok()?;
+    let status = std::process::Command::new("curl")
+        .args(["-fsSL", "--max-time", "10", "-o"])
+        .arg(&target)
+        .arg(url)
+        .status()
+        .ok()?;
+    status.success().then_some(target)
 }
 
 /// The wallpaper in use, when the link resolves.
