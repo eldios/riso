@@ -13,7 +13,7 @@
       risoPackage = pkgs:
         pkgs.rustPlatform.buildRustPackage {
           pname = "riso";
-          version = "0.2.1";
+          version = "0.3.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 

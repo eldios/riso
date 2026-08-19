@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.2.1
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,9 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Tue Aug 18 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.3.0-1
+- A theme returns to the wallpaper it was last set to
+
 * Tue Aug 18 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.2.1-1
 - Theme switches on Omarchy repaint the wallpaper and run the retint hooks
 
