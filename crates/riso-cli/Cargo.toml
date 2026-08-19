@@ -40,3 +40,10 @@ assets = [
 [dependencies]
 riso-core = { path = "../riso-core" }
 clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_norway.workspace = true
+ratatui.workspace = true
+ratatui-image.workspace = true
+image.workspace = true
+crossterm.workspace = true

@@ -3,6 +3,13 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+mod data;
+mod gui;
+mod output;
+mod tui;
+
+use output::{emit, OutputFormat};
+
 use riso_core::apply::{apply, copy_tree, Parts, Request};
 use riso_core::catalog;
 use riso_core::desktop::Desktop;
@@ -13,16 +20,131 @@ use riso_core::theme::{load_palette, render_theme, Options as RenderOptions, Out
 #[derive(Parser)]
 #[command(name = "riso", version, about = "Modular ricing framework")]
 struct Cli {
+    /// Output format for results
+    #[arg(
+        short = 'o',
+        long = "output",
+        global = true,
+        value_enum,
+        default_value_t
+    )]
+    output: OutputFormat,
     #[command(subcommand)]
     command: Command,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// Apply a theme: render it and hand it to the running desktop
+    /// Manage themes: apply, list, install, validate, remove
+    #[command(visible_alias = "t")]
+    Theme {
+        #[command(subcommand)]
+        action: ThemeAction,
+    },
+    /// Change the wallpaper: the link, and the desktop that draws it
+    #[command(name = "backgrounds", visible_aliases = ["bg", "b"])]
+    Backgrounds {
+        #[command(subcommand)]
+        action: BgAction,
+    },
+    /// Manage plugins, which teach riso to theme more applications
+    #[command(visible_alias = "p")]
+    Plugin {
+        #[command(subcommand)]
+        action: PluginAction,
+    },
+    /// Tools for theme authors
+    #[command(visible_alias = "d")]
+    Dev {
+        #[command(subcommand)]
+        action: DevAction,
+    },
+    /// Put back everything riso wrote over
+    Restore {
+        /// Where the generated theme lives
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+        /// Restore one path instead of everything
+        #[arg(long, value_name = "PATH")]
+        path: Option<PathBuf>,
+    },
+    /// Put everything back and forget the generated theme
+    Uninstall {
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+        /// Do it without asking
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Rows for the pickers: label, preview and value, tab-separated
+    #[command(hide = true)]
+    CarouselData {
+        #[arg(value_parser = ["themes", "backgrounds"])]
+        what: String,
+        /// Print what is current instead of the rows
+        #[arg(long)]
+        current: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum BgAction {
+    /// Use this image, or pick one with --gui/--tui
+    #[command(visible_alias = "s")]
     Set {
-        /// Theme name; spaces and case do not matter
-        name: String,
+        /// Image file; omit it to pick with --gui or --tui
+        image: Option<PathBuf>,
+        /// Pick from the full-screen carousel (needs quickshell)
+        #[arg(long, conflicts_with_all = ["image", "tui"])]
+        gui: bool,
+        /// Pick from a picker drawn in the terminal
+        #[arg(long, conflicts_with = "image")]
+        tui: bool,
+        /// Where the generated theme lives
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+        /// Do not tell the running desktop
+        #[arg(long)]
+        no_reload: bool,
+    },
+    /// Advance to the current theme's next background
+    #[command(visible_alias = "n")]
+    Next {
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        no_reload: bool,
+    },
+    /// Set or, with no argument, print how the wallpaper is scaled
+    #[command(visible_alias = "m")]
+    Mode {
+        #[arg(value_parser = ["fill", "fit", "center", "stretch", "tile"])]
+        mode: Option<String>,
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+    },
+    /// Print the wallpaper in use and its mode
+    #[command(visible_alias = "g")]
+    Get {
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ThemeAction {
+    /// Apply a theme: render it and hand it to the running desktop
+    #[command(visible_alias = "s")]
+    Set {
+        /// Theme name; spaces and case do not matter. Omit it to pick
+        /// with --gui or --tui.
+        name: Option<String>,
+        /// Pick from the full-screen carousel (needs quickshell)
+        #[arg(long, conflicts_with_all = ["name", "tui"])]
+        gui: bool,
+        /// Pick from a picker drawn in the terminal
+        #[arg(long, conflicts_with = "name")]
+        tui: bool,
         /// Theme directory; repeat for more, later ones overlay earlier ones.
         /// Defaults to riso's search path.
         #[arg(long = "themes", value_name = "DIR")]
@@ -47,61 +169,97 @@ enum Command {
         #[arg(long = "plugins", value_name = "DIR")]
         plugin_dirs: Vec<PathBuf>,
     },
-    /// Manage installed themes
-    Theme {
-        #[command(subcommand)]
-        action: ThemeAction,
-    },
-    /// Manage plugins, which teach riso to theme more applications
-    Plugin {
-        #[command(subcommand)]
-        action: PluginAction,
-    },
-    /// Put back everything riso wrote over
-    Restore {
+    /// Print the theme in use
+    #[command(visible_alias = "g")]
+    Get {
         /// Where the generated theme lives
         #[arg(long, value_name = "DIR")]
         state: Option<PathBuf>,
-        /// Restore one path instead of everything
-        #[arg(long, value_name = "PATH")]
-        path: Option<PathBuf>,
     },
-    /// Put everything back and forget the generated theme
-    Uninstall {
+    /// List the themes riso can see
+    #[command(visible_alias = "l")]
+    List {
+        /// Theme directory; repeat for more
+        #[arg(long = "themes", value_name = "DIR")]
+        theme_dirs: Vec<PathBuf>,
+    },
+    /// Install a theme from the catalog or from any git repository
+    #[command(visible_alias = "i")]
+    Install {
+        /// Theme name in the catalog, or a git URL
+        source: String,
+        /// Where to install; defaults to the user theme directory
         #[arg(long, value_name = "DIR")]
-        state: Option<PathBuf>,
-        /// Do it without asking
+        into: Option<PathBuf>,
+        /// Catalog index to look the name up in
+        #[arg(long, value_name = "URL", default_value = DEFAULT_CATALOG)]
+        catalog: String,
+        /// Install under this name instead of the one derived from the source
         #[arg(long)]
-        yes: bool,
-    },
-    /// Change the wallpaper: the link, and the desktop that draws it
-    Bg {
-        #[command(subcommand)]
-        action: BgAction,
-    },
-    /// Pick a theme or a background from a full-screen strip of previews.
-    /// Needs quickshell on PATH.
-    Carousel {
-        /// What to browse
-        #[arg(value_parser = ["themes", "backgrounds"], default_value = "themes")]
-        what: String,
-    },
-    /// Rows for the carousel: label, preview and value, tab-separated
-    #[command(hide = true)]
-    CarouselData {
-        #[arg(value_parser = ["themes", "backgrounds"])]
-        what: String,
-        /// Print what is current instead of the rows
+        name: Option<String>,
+        /// Keep a theme the safety check would refuse. The findings still
+        /// print; accepting them is on you.
         #[arg(long)]
-        current: bool,
+        trust: bool,
     },
+    /// Check that a theme is data and nothing else
+    #[command(visible_alias = "v")]
+    Validate {
+        /// Theme directory to inspect
+        path: PathBuf,
+        /// Report findings without failing on them
+        #[arg(long)]
+        warn_only: bool,
+    },
+    /// Remove a theme riso installed
+    #[command(visible_alias = "rm")]
+    Remove {
+        name: String,
+        /// Where themes were installed; defaults to the user theme directory
+        #[arg(long, value_name = "DIR")]
+        into: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum PluginAction {
+    /// List installed plugins
+    #[command(visible_alias = "l")]
+    List {
+        #[arg(long = "plugins", value_name = "DIR")]
+        plugin_dirs: Vec<PathBuf>,
+    },
+    /// Install a plugin from a git repository
+    #[command(visible_alias = "i")]
+    Install {
+        /// Git URL
+        repo: String,
+        #[arg(long, value_name = "DIR")]
+        into: Option<PathBuf>,
+        /// Install under this name instead of the one derived from the URL
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Remove an installed plugin
+    #[command(visible_alias = "rm")]
+    Remove {
+        name: String,
+        #[arg(long, value_name = "DIR")]
+        into: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DevAction {
     /// Print a theme's palette as resolved key/value pairs
+    #[command(visible_alias = "p")]
     Palette {
         /// Directory holding colors.toml
         #[arg(long)]
         theme: PathBuf,
     },
     /// Build a theme into a directory of ready-to-read config files
+    #[command(visible_alias = "r")]
     Render {
         /// Directory holding colors.toml and any hand-written theme files
         #[arg(long)]
@@ -121,108 +279,7 @@ enum Command {
     },
 }
 
-#[derive(Subcommand)]
-enum BgAction {
-    /// Use this image
-    Set {
-        image: PathBuf,
-        /// Where the generated theme lives
-        #[arg(long, value_name = "DIR")]
-        state: Option<PathBuf>,
-        /// Do not tell the running desktop
-        #[arg(long)]
-        no_reload: bool,
-    },
-    /// Advance to the current theme's next background
-    Next {
-        #[arg(long, value_name = "DIR")]
-        state: Option<PathBuf>,
-        #[arg(long)]
-        no_reload: bool,
-    },
-    /// Set or, with no argument, print how the wallpaper is scaled
-    Mode {
-        #[arg(value_parser = ["fill", "fit", "center", "stretch", "tile"])]
-        mode: Option<String>,
-        #[arg(long, value_name = "DIR")]
-        state: Option<PathBuf>,
-    },
-    /// Print the wallpaper in use and its mode
-    Get {
-        #[arg(long, value_name = "DIR")]
-        state: Option<PathBuf>,
-    },
-}
-
-#[derive(Subcommand)]
-enum ThemeAction {
-    /// List the themes riso can see
-    List {
-        /// Theme directory; repeat for more
-        #[arg(long = "themes", value_name = "DIR")]
-        theme_dirs: Vec<PathBuf>,
-    },
-    /// Install a theme from the catalog or from any git repository
-    Install {
-        /// Theme name in the catalog, or a git URL
-        source: String,
-        /// Where to install; defaults to the user theme directory
-        #[arg(long, value_name = "DIR")]
-        into: Option<PathBuf>,
-        /// Catalog index to look the name up in
-        #[arg(long, value_name = "URL", default_value = DEFAULT_CATALOG)]
-        catalog: String,
-        /// Install under this name instead of the one derived from the source
-        #[arg(long)]
-        name: Option<String>,
-        /// Keep a theme the safety check would refuse. The findings still
-        /// print; accepting them is on you.
-        #[arg(long)]
-        trust: bool,
-    },
-    /// Check that a theme is data and nothing else
-    Validate {
-        /// Theme directory to inspect
-        path: PathBuf,
-        /// Report findings without failing on them
-        #[arg(long)]
-        warn_only: bool,
-    },
-    /// Remove a theme riso installed
-    Remove {
-        name: String,
-        /// Where themes were installed; defaults to the user theme directory
-        #[arg(long, value_name = "DIR")]
-        into: Option<PathBuf>,
-    },
-}
-
-#[derive(Subcommand)]
-enum PluginAction {
-    /// List installed plugins
-    List {
-        #[arg(long = "plugins", value_name = "DIR")]
-        plugin_dirs: Vec<PathBuf>,
-    },
-    /// Install a plugin from a git repository
-    Install {
-        /// Git URL
-        repo: String,
-        #[arg(long, value_name = "DIR")]
-        into: Option<PathBuf>,
-        /// Install under this name instead of the one derived from the URL
-        #[arg(long)]
-        name: Option<String>,
-    },
-    /// Remove an installed plugin
-    Remove {
-        name: String,
-        #[arg(long, value_name = "DIR")]
-        into: Option<PathBuf>,
-    },
-}
-
-fn run_plugin(action: PluginAction) -> Result<(), String> {
+fn run_plugin(action: PluginAction, output: OutputFormat) -> Result<(), String> {
     match action {
         PluginAction::List { plugin_dirs } => {
             let dirs = if plugin_dirs.is_empty() {
@@ -234,13 +291,25 @@ fn run_plugin(action: PluginAction) -> Result<(), String> {
             if found.is_empty() {
                 eprintln!("riso: no plugins installed");
             }
-            for plugin in found {
-                println!(
-                    "{}\t{}\t{} file(s)",
-                    plugin.manifest.id,
-                    plugin.manifest.name.as_deref().unwrap_or("-"),
-                    plugin.manifest.render.len()
-                );
+            let rows: Vec<_> = found
+                .iter()
+                .map(|plugin| {
+                    serde_json::json!({
+                        "id": plugin.manifest.id,
+                        "name": plugin.manifest.name,
+                        "files": plugin.manifest.render.len(),
+                    })
+                })
+                .collect();
+            if !emit(output, &rows)? {
+                for plugin in &found {
+                    println!(
+                        "{}\t{}\t{} file(s)",
+                        plugin.manifest.id,
+                        plugin.manifest.name.as_deref().unwrap_or("-"),
+                        plugin.manifest.render.len()
+                    );
+                }
             }
             Ok(())
         }
@@ -266,7 +335,12 @@ fn run_plugin(action: PluginAction) -> Result<(), String> {
                 "manifest.toml",
             )
             .map_err(|e| e.to_string())?;
-            println!("installed {name} to {}", path.display());
+            if !emit(
+                output,
+                &serde_json::json!({ "installed": name, "path": path }),
+            )? {
+                println!("installed {name} to {}", path.display());
+            }
             Ok(())
         }
         PluginAction::Remove { name, into } => {
@@ -280,7 +354,9 @@ fn run_plugin(action: PluginAction) -> Result<(), String> {
             }
             std::fs::remove_dir_all(&path)
                 .map_err(|e| format!("removing {}: {e}", path.display()))?;
-            println!("removed {}", path.display());
+            if !emit(output, &serde_json::json!({ "removed": path }))? {
+                println!("removed {}", path.display());
+            }
             Ok(())
         }
     }
@@ -321,181 +397,13 @@ fn seed_fallback(dir: &Path) {
     }
 }
 
-fn run_theme(action: ThemeAction) -> Result<(), String> {
+fn run_theme(action: ThemeAction, output: OutputFormat) -> Result<(), String> {
+    let _ = output;
     match action {
-        ThemeAction::List { theme_dirs } => {
-            let user = user_theme_dir()?;
-            let mut dirs = if theme_dirs.is_empty() {
-                // installed() lets the first occurrence win, the reverse of
-                // the overlay order the search path is written in.
-                let mut defaults = catalog::default_theme_dirs();
-                defaults.reverse();
-                defaults
-            } else {
-                theme_dirs
-            };
-            if !dirs.contains(&user) {
-                dirs.insert(0, user.clone());
-            }
-
-            let mut found = catalog::installed(&dirs, Some(&user));
-            if found.is_empty() {
-                seed_fallback(&user);
-                found = catalog::installed(&dirs, Some(&user));
-            }
-            for theme in found {
-                println!(
-                    "{}	{}{}",
-                    theme.name,
-                    theme.path.display(),
-                    if theme.removable { "" } else { "	(read-only)" }
-                );
-            }
-            Ok(())
-        }
-        ThemeAction::Install {
-            source,
-            into,
-            catalog: index_url,
+        ThemeAction::Set {
             name,
-            trust,
-        } => {
-            let into = match into {
-                Some(dir) => dir,
-                None => user_theme_dir()?,
-            };
-            let looks_like_url = source.contains("://") || source.contains('@');
-
-            let (repo, rev) = if looks_like_url {
-                (source.clone(), None)
-            } else {
-                let index = catalog::fetch_index(&ProcessExecutor, &index_url)
-                    .map_err(|e| e.to_string())?;
-                let entry = index
-                    .find(&source)
-                    .ok_or_else(|| format!("no theme named '{source}' in the catalog"))?;
-                if let Some(reason) = &entry.yanked {
-                    return Err(format!(
-                        "'{source}' was withdrawn from the catalog: {reason}"
-                    ));
-                }
-                (entry.repo.clone(), entry.rev.clone())
-            };
-
-            let name = name.unwrap_or_else(|| catalog::name_from_repo(&repo));
-            if !catalog::is_safe_name(&name) {
-                return Err(format!("'{name}' is not usable as a directory name"));
-            }
-
-            let path = catalog::install_from_git(
-                &ProcessExecutor,
-                &repo,
-                rev.as_deref(),
-                &name,
-                &into,
-                "colors.toml",
-            )
-            .map_err(|e| e.to_string())?;
-
-            // The same gate the catalog runs, because this theme may never
-            // have passed through one: a clone straight from a git URL is
-            // exactly the case the client-side check exists for. Only the
-            // findings that make a theme unsafe matter here; catalog policy
-            // (license, size) belongs to `theme validate` and the CI that
-            // runs it.
-            let findings = riso_core::validate::validate(&path, &Default::default())
-                .map_err(|e| e.to_string())?;
-            let fatal = findings.iter().filter(|f| f.is_fatal()).count();
-            for finding in findings.iter().filter(|f| f.is_fatal()) {
-                eprintln!("riso: REFUSE {name}: {}", finding.describe());
-            }
-            if fatal > 0 && !trust {
-                let _ = std::fs::remove_dir_all(&path);
-                return Err(format!(
-                    "'{name}' is not just data: {fatal} finding(s) make it unsafe, nothing was installed (--trust overrides)"
-                ));
-            }
-            if fatal > 0 {
-                eprintln!("riso: kept on your say-so: --trust accepted {fatal} finding(s)");
-            }
-
-            println!("installed {name} to {}", path.display());
-            Ok(())
-        }
-        ThemeAction::Validate { path, warn_only } => {
-            let findings = riso_core::validate::validate(&path, &Default::default())
-                .map_err(|e| e.to_string())?;
-
-            if findings.is_empty() {
-                println!("{}: clean", path.display());
-                return Ok(());
-            }
-            let fatal = findings.iter().filter(|f| f.is_fatal()).count();
-            for finding in &findings {
-                println!(
-                    "{} {}",
-                    if finding.is_fatal() {
-                        "REFUSE"
-                    } else {
-                        "warn  "
-                    },
-                    finding.describe()
-                );
-            }
-            if fatal > 0 && !warn_only {
-                return Err(format!(
-                    "{fatal} finding(s) make this theme unsafe to install"
-                ));
-            }
-            Ok(())
-        }
-        ThemeAction::Remove { name, into } => {
-            let into = match into {
-                Some(dir) => dir,
-                None => user_theme_dir()?,
-            };
-            let path = catalog::remove(&name, std::slice::from_ref(&into), &into)
-                .map_err(|e| e.to_string())?;
-            println!("removed {}", path.display());
-            Ok(())
-        }
-    }
-}
-
-fn main() -> ExitCode {
-    match run(Cli::parse()) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(message) => {
-            eprintln!("riso: {message}");
-            ExitCode::FAILURE
-        }
-    }
-}
-
-/// Where generated theme state lives, honouring XDG before falling back.
-///
-/// On an Omarchy system the desktop reads its state from its own directory,
-/// so riso renders where that desktop looks and is a drop-in; anywhere else
-/// the state is riso's own. `--state` overrides either way.
-fn default_state_dir() -> Result<PathBuf, String> {
-    let name = if std::env::var_os("OMARCHY_PATH").is_some_and(|v| !v.is_empty()) {
-        "omarchy"
-    } else {
-        "riso"
-    };
-    if let Ok(xdg) = std::env::var("XDG_STATE_HOME") {
-        if !xdg.is_empty() {
-            return Ok(PathBuf::from(xdg).join(name));
-        }
-    }
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_owned())?;
-    Ok(PathBuf::from(home).join(".local/state").join(name))
-}
-
-fn run(cli: Cli) -> Result<(), String> {
-    match cli.command {
-        Command::Set {
-            name,
+            gui,
+            tui,
             theme_dirs,
             template_dirs,
             state,
@@ -504,6 +412,15 @@ fn run(cli: Cli) -> Result<(), String> {
             desktop,
             plugin_dirs,
         } => {
+            if gui {
+                return gui::run(data::What::Themes);
+            }
+            if tui {
+                return tui::run(data::What::Themes, state);
+            }
+            let Some(name) = name else {
+                return Err("a theme name is needed, or --gui/--tui to pick one".to_owned());
+            };
             let state_dir = match state {
                 Some(dir) => dir,
                 None => default_state_dir()?,
@@ -574,16 +491,26 @@ fn run(cli: Cli) -> Result<(), String> {
             let applied = apply(&request, &ProcessExecutor).map_err(|e| e.to_string())?;
             report_warnings(&applied.warnings);
 
-            println!(
-                "applied {} to {} ({} rendered, {} from the theme, desktop: {})",
-                applied.name,
-                applied.target.display(),
-                applied.report.rendered().count(),
-                applied.report.kept().count(),
-                desktop.name()
-            );
-            if let Some(background) = &applied.background {
-                println!("background {}", background.display());
+            let summary = serde_json::json!({
+                "theme": applied.name,
+                "target": applied.target,
+                "rendered": applied.report.rendered().count(),
+                "kept": applied.report.kept().count(),
+                "desktop": desktop.name(),
+                "background": applied.background,
+            });
+            if !emit(output, &summary)? {
+                println!(
+                    "applied {} to {} ({} rendered, {} from the theme, desktop: {})",
+                    applied.name,
+                    applied.target.display(),
+                    applied.report.rendered().count(),
+                    applied.report.kept().count(),
+                    desktop.name()
+                );
+                if let Some(background) = &applied.background {
+                    println!("background {}", background.display());
+                }
             }
             for plugin in &applied.plugins {
                 match &plugin.skipped {
@@ -597,6 +524,232 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             Ok(())
         }
+        ThemeAction::Get { state } => {
+            let state = state_or_default(state)?;
+            match data::current_theme(&state) {
+                Some(name) => {
+                    if !emit(output, &serde_json::json!({ "name": name }))? {
+                        println!("{name}");
+                    }
+                    Ok(())
+                }
+                None => Err("no theme is applied".to_owned()),
+            }
+        }
+        ThemeAction::List { theme_dirs } => {
+            let user = user_theme_dir()?;
+            let mut dirs = if theme_dirs.is_empty() {
+                // installed() lets the first occurrence win, the reverse of
+                // the overlay order the search path is written in.
+                let mut defaults = catalog::default_theme_dirs();
+                defaults.reverse();
+                defaults
+            } else {
+                theme_dirs
+            };
+            if !dirs.contains(&user) {
+                dirs.insert(0, user.clone());
+            }
+
+            let mut found = catalog::installed(&dirs, Some(&user));
+            if found.is_empty() {
+                seed_fallback(&user);
+                found = catalog::installed(&dirs, Some(&user));
+            }
+            let rows: Vec<_> = found
+                .into_iter()
+                .map(|theme| {
+                    serde_json::json!({
+                        "name": theme.name,
+                        "path": theme.path,
+                        "read_only": !theme.removable,
+                    })
+                })
+                .collect();
+            if !emit(output, &rows)? {
+                for row in &rows {
+                    println!(
+                        "{}	{}{}",
+                        row["name"].as_str().unwrap_or_default(),
+                        row["path"].as_str().unwrap_or_default(),
+                        if row["read_only"] == true {
+                            "	(read-only)"
+                        } else {
+                            ""
+                        }
+                    );
+                }
+            }
+            Ok(())
+        }
+        ThemeAction::Install {
+            source,
+            into,
+            catalog: index_url,
+            name,
+            trust,
+        } => {
+            let into = match into {
+                Some(dir) => dir,
+                None => user_theme_dir()?,
+            };
+            let looks_like_url = source.contains("://") || source.contains('@');
+
+            let (repo, rev) = if looks_like_url {
+                (source.clone(), None)
+            } else {
+                let index = catalog::fetch_index(&ProcessExecutor, &index_url)
+                    .map_err(|e| e.to_string())?;
+                let entry = index
+                    .find(&source)
+                    .ok_or_else(|| format!("no theme named '{source}' in the catalog"))?;
+                if let Some(reason) = &entry.yanked {
+                    return Err(format!(
+                        "'{source}' was withdrawn from the catalog: {reason}"
+                    ));
+                }
+                (entry.repo.clone(), entry.rev.clone())
+            };
+
+            let name = name.unwrap_or_else(|| catalog::name_from_repo(&repo));
+            if !catalog::is_safe_name(&name) {
+                return Err(format!("'{name}' is not usable as a directory name"));
+            }
+
+            let path = catalog::install_from_git(
+                &ProcessExecutor,
+                &repo,
+                rev.as_deref(),
+                &name,
+                &into,
+                "colors.toml",
+            )
+            .map_err(|e| e.to_string())?;
+
+            // The same gate the catalog runs, because this theme may never
+            // have passed through one: a clone straight from a git URL is
+            // exactly the case the client-side check exists for. Only the
+            // findings that make a theme unsafe matter here; catalog policy
+            // (license, size) belongs to `theme validate` and the CI that
+            // runs it.
+            let findings = riso_core::validate::validate(&path, &Default::default())
+                .map_err(|e| e.to_string())?;
+            let fatal = findings.iter().filter(|f| f.is_fatal()).count();
+            for finding in findings.iter().filter(|f| f.is_fatal()) {
+                eprintln!("riso: REFUSE {name}: {}", finding.describe());
+            }
+            if fatal > 0 && !trust {
+                let _ = std::fs::remove_dir_all(&path);
+                return Err(format!(
+                    "'{name}' is not just data: {fatal} finding(s) make it unsafe, nothing was installed (--trust overrides)"
+                ));
+            }
+            if fatal > 0 {
+                eprintln!("riso: kept on your say-so: --trust accepted {fatal} finding(s)");
+            }
+
+            if !emit(
+                output,
+                &serde_json::json!({ "installed": name, "path": path }),
+            )? {
+                println!("installed {name} to {}", path.display());
+            }
+            Ok(())
+        }
+        ThemeAction::Validate { path, warn_only } => {
+            let findings = riso_core::validate::validate(&path, &Default::default())
+                .map_err(|e| e.to_string())?;
+
+            let fatal = findings.iter().filter(|f| f.is_fatal()).count();
+            let report = serde_json::json!({
+                "path": path,
+                "fatal": fatal,
+                "findings": findings
+                    .iter()
+                    .map(|f| serde_json::json!({
+                        "severity": if f.is_fatal() { "refuse" } else { "warn" },
+                        "message": f.describe(),
+                    }))
+                    .collect::<Vec<_>>(),
+            });
+            if !emit(output, &report)? {
+                if findings.is_empty() {
+                    println!("{}: clean", path.display());
+                }
+                for finding in &findings {
+                    println!(
+                        "{} {}",
+                        if finding.is_fatal() {
+                            "REFUSE"
+                        } else {
+                            "warn  "
+                        },
+                        finding.describe()
+                    );
+                }
+            }
+            if findings.is_empty() {
+                return Ok(());
+            }
+            if fatal > 0 && !warn_only {
+                return Err(format!(
+                    "{fatal} finding(s) make this theme unsafe to install"
+                ));
+            }
+            Ok(())
+        }
+        ThemeAction::Remove { name, into } => {
+            let into = match into {
+                Some(dir) => dir,
+                None => user_theme_dir()?,
+            };
+            let path = catalog::remove(&name, std::slice::from_ref(&into), &into)
+                .map_err(|e| e.to_string())?;
+            if !emit(output, &serde_json::json!({ "removed": path }))? {
+                println!("removed {}", path.display());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn main() -> ExitCode {
+    match run(Cli::parse()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(message) => {
+            eprintln!("riso: {message}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Where generated theme state lives, honouring XDG before falling back.
+///
+/// On an Omarchy system the desktop reads its state from its own directory,
+/// so riso renders where that desktop looks and is a drop-in; anywhere else
+/// the state is riso's own. `--state` overrides either way.
+pub(crate) fn default_state_dir() -> Result<PathBuf, String> {
+    let name = if std::env::var_os("OMARCHY_PATH").is_some_and(|v| !v.is_empty()) {
+        "omarchy"
+    } else {
+        "riso"
+    };
+    if let Ok(xdg) = std::env::var("XDG_STATE_HOME") {
+        if !xdg.is_empty() {
+            return Ok(PathBuf::from(xdg).join(name));
+        }
+    }
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_owned())?;
+    Ok(PathBuf::from(home).join(".local/state").join(name))
+}
+
+fn run(cli: Cli) -> Result<(), String> {
+    let output = cli.output;
+    match cli.command {
+        Command::Theme { action } => run_theme(action, output),
+        Command::Backgrounds { action } => run_bg(action, output),
+        Command::Plugin { action } => run_plugin(action, output),
+        Command::Dev { action } => run_dev(action, output),
         Command::Restore { state, path } => {
             let state_dir = match state {
                 Some(dir) => dir,
@@ -617,14 +770,27 @@ fn run(cli: Cli) -> Result<(), String> {
             if done.is_empty() {
                 eprintln!("riso: nothing to put back");
             }
-            for outcome in done {
-                match outcome {
-                    riso_core::snapshot::Restored::Contents(path) => {
-                        println!("restored {}", path.display())
-                    }
-                    riso_core::snapshot::Restored::Removed(path) => {
-                        println!("removed {}", path.display())
-                    }
+            let (restored, removed): (Vec<_>, Vec<_>) = done
+                .into_iter()
+                .partition(|o| matches!(o, riso_core::snapshot::Restored::Contents(_)));
+            let as_paths = |v: Vec<riso_core::snapshot::Restored>| {
+                v.into_iter()
+                    .map(|o| match o {
+                        riso_core::snapshot::Restored::Contents(p)
+                        | riso_core::snapshot::Restored::Removed(p) => p,
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let (restored, removed) = (as_paths(restored), as_paths(removed));
+            if !emit(
+                output,
+                &serde_json::json!({ "restored": restored, "removed": removed }),
+            )? {
+                for path in &restored {
+                    println!("restored {}", path.display());
+                }
+                for path in &removed {
+                    println!("removed {}", path.display());
                 }
             }
             Ok(())
@@ -648,35 +814,59 @@ fn run(cli: Cli) -> Result<(), String> {
                 return Err("re-run with --yes to go ahead".to_owned());
             }
 
+            let mut restored = Vec::new();
+            let mut removed = Vec::new();
             for outcome in store.restore_all().map_err(|e| e.to_string())? {
                 match outcome {
-                    riso_core::snapshot::Restored::Contents(path) => {
-                        println!("restored {}", path.display())
-                    }
-                    riso_core::snapshot::Restored::Removed(path) => {
-                        println!("removed {}", path.display())
-                    }
+                    riso_core::snapshot::Restored::Contents(path) => restored.push(path),
+                    riso_core::snapshot::Restored::Removed(path) => removed.push(path),
                 }
             }
             std::fs::remove_dir_all(&state_dir)
                 .map_err(|e| format!("removing {}: {e}", state_dir.display()))?;
-            println!("removed {}", state_dir.display());
-            Ok(())
-        }
-        Command::Bg { action } => run_bg(action),
-        Command::Carousel { what } => run_carousel(&what),
-        Command::CarouselData { what, current } => run_carousel_data(&what, current),
-        Command::Theme { action } => run_theme(action),
-        Command::Plugin { action } => run_plugin(action),
-        Command::Palette { theme } => {
-            let (palette, warnings) = load_palette(&theme).map_err(|e| e.to_string())?;
-            report_warnings(&warnings);
-            for (key, value) in palette.iter() {
-                println!("{key}\t{value}");
+            if !emit(
+                output,
+                &serde_json::json!({
+                    "restored": restored,
+                    "removed": removed,
+                    "state_removed": state_dir,
+                }),
+            )? {
+                for path in &restored {
+                    println!("restored {}", path.display());
+                }
+                for path in &removed {
+                    println!("removed {}", path.display());
+                }
+                println!("removed {}", state_dir.display());
             }
             Ok(())
         }
-        Command::Render {
+        Command::CarouselData { what, current } => run_carousel_data(&what, current),
+    }
+}
+
+fn run_dev(action: DevAction, output: OutputFormat) -> Result<(), String> {
+    match action {
+        DevAction::Palette { theme } => {
+            let (palette, warnings) = load_palette(&theme).map_err(|e| e.to_string())?;
+            report_warnings(&warnings);
+            let pairs: Vec<_> = palette
+                .iter()
+                .map(|(key, value)| serde_json::json!({ "key": key, "value": value }))
+                .collect();
+            if !emit(output, &pairs)? {
+                for pair in &pairs {
+                    println!(
+                        "{}\t{}",
+                        pair["key"].as_str().unwrap_or_default(),
+                        pair["value"].as_str().unwrap_or_default()
+                    );
+                }
+            }
+            Ok(())
+        }
+        DevAction::Render {
             theme,
             out,
             template_dirs,
@@ -702,18 +892,34 @@ fn run(cli: Cli) -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
 
-            for outcome in &report.outcomes {
-                match outcome {
-                    Outcome::Rendered { target, .. } => {
-                        println!(
-                            "{} {}",
-                            if dry_run { "would write" } else { "wrote" },
-                            target.display()
-                        );
-                    }
-                    Outcome::Kept { target, .. } => {
-                        println!("kept {} (provided by the theme)", target.display());
-                    }
+            let written: Vec<_> = report
+                .outcomes
+                .iter()
+                .filter_map(|o| match o {
+                    Outcome::Rendered { target, .. } => Some(target.clone()),
+                    Outcome::Kept { .. } => None,
+                })
+                .collect();
+            let kept: Vec<_> = report
+                .outcomes
+                .iter()
+                .filter_map(|o| match o {
+                    Outcome::Kept { target, .. } => Some(target.clone()),
+                    Outcome::Rendered { .. } => None,
+                })
+                .collect();
+            let summary =
+                serde_json::json!({ "dry_run": dry_run, "written": written, "kept": kept });
+            if !emit(output, &summary)? {
+                for target in &written {
+                    println!(
+                        "{} {}",
+                        if dry_run { "would write" } else { "wrote" },
+                        target.display()
+                    );
+                }
+                for target in &kept {
+                    println!("kept {} (provided by the theme)", target.display());
                 }
             }
             Ok(())
@@ -737,7 +943,12 @@ fn current_theme_name(state: &Path) -> Option<String> {
     (!name.is_empty()).then(|| name.to_owned())
 }
 
-fn set_background(image: &Path, state: &Path, no_reload: bool) -> Result<(), String> {
+fn set_background(
+    image: &Path,
+    state: &Path,
+    no_reload: bool,
+    output: OutputFormat,
+) -> Result<(), String> {
     let image = std::fs::canonicalize(image).map_err(|e| format!("{}: {e}", image.display()))?;
     if !image.is_file() {
         return Err(format!("{}: not a file", image.display()));
@@ -762,19 +973,33 @@ fn set_background(image: &Path, state: &Path, no_reload: bool) -> Result<(), Str
             .map_err(|e| e.to_string())?;
     }
 
-    println!("background {}", image.display());
+    if !emit(output, &serde_json::json!({ "background": image }))? {
+        println!("background {}", image.display());
+    }
     Ok(())
 }
 
-fn run_bg(action: BgAction) -> Result<(), String> {
+fn run_bg(action: BgAction, output: OutputFormat) -> Result<(), String> {
+    let _ = output;
     match action {
         BgAction::Set {
             image,
+            gui,
+            tui,
             state,
             no_reload,
         } => {
+            if gui {
+                return gui::run(data::What::Backgrounds);
+            }
+            if tui {
+                return tui::run(data::What::Backgrounds, state);
+            }
+            let Some(image) = image else {
+                return Err("an image is needed, or --gui/--tui to pick one".to_owned());
+            };
             let state = state_or_default(state)?;
-            set_background(&image, &state, no_reload)
+            set_background(&image, &state, no_reload, output)
         }
         BgAction::Next { state, no_reload } => {
             let state = state_or_default(state)?;
@@ -784,7 +1009,7 @@ fn run_bg(action: BgAction) -> Result<(), String> {
             let Some(chosen) = riso_core::background::next(&images, showing.as_deref()) else {
                 return Err("the current theme ships no backgrounds".to_owned());
             };
-            set_background(&chosen, &state, no_reload)
+            set_background(&chosen, &state, no_reload, output)
         }
         BgAction::Mode { mode, state } => {
             let state = state_or_default(state)?;
@@ -793,125 +1018,71 @@ fn run_bg(action: BgAction) -> Result<(), String> {
                 Some(mode) => {
                     riso_core::atomic::write_atomic(&path, &format!("{mode}\n"))
                         .map_err(|e| e.to_string())?;
-                    println!("mode {mode}");
+                    if !emit(output, &serde_json::json!({ "mode": mode }))? {
+                        println!("mode {mode}");
+                    }
                 }
                 None => {
                     let mode = std::fs::read_to_string(&path).unwrap_or_default();
                     let mode = mode.trim();
-                    println!("{}", if mode.is_empty() { "fill" } else { mode });
+                    let mode = if mode.is_empty() { "fill" } else { mode };
+                    if !emit(output, &serde_json::json!({ "mode": mode }))? {
+                        println!("{mode}");
+                    }
                 }
             }
             Ok(())
         }
         BgAction::Get { state } => {
             let state = state_or_default(state)?;
-            match riso_core::background::current(&state.join("current/background")) {
-                Some(path) => println!("{}", path.display()),
-                None => println!("none"),
-            }
+            let image = riso_core::background::current(&state.join("current/background"));
             let mode =
                 std::fs::read_to_string(state.join("current/background.mode")).unwrap_or_default();
             let mode = mode.trim();
-            println!("mode {}", if mode.is_empty() { "fill" } else { mode });
+            let mode = if mode.is_empty() { "fill" } else { mode };
+            if !emit(output, &serde_json::json!({ "image": image, "mode": mode }))? {
+                match &image {
+                    Some(path) => println!("{}", path.display()),
+                    None => println!("none"),
+                }
+                println!("mode {mode}");
+            }
             Ok(())
         }
     }
 }
 
-/// The carousel ships inside the binary and runs on quickshell: the QML is
-/// written out where the session can read it, and every hook points back at
-/// this same executable.
-const CAROUSEL_QML: &str = include_str!("../../../carousel/shell.qml");
-
-fn run_carousel(what: &str) -> Result<(), String> {
-    let exe = std::env::current_exe()
-        .map_err(|e| e.to_string())?
-        .to_string_lossy()
-        .into_owned();
-
-    let base = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join("riso-carousel");
-    riso_core::atomic::write_atomic(&base.join("shell.qml"), CAROUSEL_QML)
-        .map_err(|e| e.to_string())?;
-
-    let (apply_env, default_apply, current) = match what {
-        "backgrounds" => (
-            "RISO_CAROUSEL_APPLY_BG",
-            format!("{exe} bg set"),
-            "readlink -f \"${XDG_STATE_HOME:-$HOME/.local/state}/riso/current/background\""
-                .to_owned(),
-        ),
-        _ => (
-            "RISO_CAROUSEL_APPLY",
-            format!("{exe} set"),
-            "cat \"${XDG_STATE_HOME:-$HOME/.local/state}/riso/current/theme.name\"".to_owned(),
-        ),
-    };
-    let apply = std::env::var(apply_env).unwrap_or(default_apply);
-
-    use std::os::unix::process::CommandExt;
-    let error = std::process::Command::new("quickshell")
-        .arg("-n")
-        .arg("-p")
-        .arg(&base)
-        .env("RISO_CAROUSEL_LIST", format!("{exe} carousel-data {what}"))
-        .env("RISO_CAROUSEL_APPLY", apply)
-        .env("RISO_CAROUSEL_CURRENT", current)
-        .exec();
-    Err(format!("could not run quickshell: {error}"))
-}
-
 fn run_carousel_data(what: &str, current: bool) -> Result<(), String> {
     let state = default_state_dir()?;
 
-    if what == "backgrounds" {
-        if current {
-            if let Some(path) = riso_core::background::current(&state.join("current/background")) {
-                println!("{}", path.display());
+    if current {
+        match what {
+            "backgrounds" => {
+                if let Some(path) = data::current_background(&state) {
+                    println!("{}", path.display());
+                }
             }
-            return Ok(());
-        }
-        for image in riso_core::background::candidates(&[state.join("current/theme/backgrounds")]) {
-            let label = image
-                .file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            println!("{label}\t{}\t{}", image.display(), image.display());
+            _ => {
+                if let Some(name) = data::current_theme(&state) {
+                    println!("{name}");
+                }
+            }
         }
         return Ok(());
     }
 
-    if current {
-        let name = std::fs::read_to_string(state.join("current/theme.name")).unwrap_or_default();
-        let name = name.trim();
-        if !name.is_empty() {
-            println!("{name}");
-        }
-        return Ok(());
-    }
-    let dirs = catalog::default_theme_dirs();
-    for theme in catalog::installed(&dirs, None) {
-        let preview = theme_preview(&theme.path)
+    let rows = match what {
+        "backgrounds" => data::background_rows(&state),
+        _ => data::theme_rows(),
+    };
+    for row in rows {
+        let preview = row
+            .preview
             .map(|p| p.display().to_string())
             .unwrap_or_default();
-        println!("{}\t{preview}\t{}", theme.name, theme.name);
+        println!("{}\t{preview}\t{}", row.label, row.value);
     }
     Ok(())
-}
-
-/// The file a theme names preview.*, else its first background.
-fn theme_preview(theme: &Path) -> Option<PathBuf> {
-    for name in ["preview.png", "preview.jpg", "preview.jpeg", "preview.webp"] {
-        let candidate = theme.join(name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    riso_core::background::candidates(&[theme.join("backgrounds")])
-        .into_iter()
-        .next()
 }
 
 /// Warnings go to stderr so they never contaminate piped output.

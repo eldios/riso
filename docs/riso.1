@@ -18,14 +18,33 @@ template directory in turn, then the templates built into
 A theme therefore cannot be incomplete, and a desktop that ships its own
 templates keeps its own look.
 .SH COMMANDS
+Commands are grouped by component, and every one has a short alias:
+.B riso t s
+is
+.BR "riso theme set" ,
+and
+.B backgrounds
+answers to
+.BR bg " and " b .
 .TP
-.BI "set " name
+.BI "theme set " "[name] [--gui|--tui]"
 Render a theme, swap it in, and tell the running desktop. The name is folded
 the way a menu spells it, so
 .B "Tokyo Night"
 and
 .B tokyo-night
-are the same theme.
+are the same theme. Without a name,
+.B \-\-gui
+opens a full-screen strip of previews (runs on
+.BR quickshell ,
+which must be on PATH) and
+.B \-\-tui
+draws the same picker in the terminal, with image previews where the
+terminal speaks kitty, sixel or iTerm2 graphics and unicode half-blocks
+anywhere else. In both, typing filters, arrows move, Enter applies.
+.TP
+.B "theme get"
+Print the theme in use.
 .TP
 .B "theme list"
 List every theme found, marking those a package manager owns as read-only.
@@ -42,36 +61,39 @@ Remove a theme
 .B riso
 installed. Themes owned by a package manager are refused.
 .TP
+.BI "backgrounds set " "[image] [--gui|--tui]"
+Point the current-background link at an image and tell the desktop that
+draws its own wallpaper; a bare compositor is not told, because the daemon
+that paints for it is not
+.BR riso 's
+to guess.
+.B \-\-gui
+and
+.B \-\-tui
+open the same pickers over the current theme's wallpapers. The image in use
+is recorded against the theme showing it, so returning to a theme returns
+to its image.
+.TP
+.B "backgrounds next"
+Advance to the current theme's next wallpaper. A theme applied for the first
+time settles on its first image; this is the command that moves through the
+rest, since applying is also what a shell switch does to retint.
+.TP
+.BI "backgrounds mode " [mode]
+Set or print how the wallpaper is scaled
+.RB ( fill ", " fit ", " center ", " stretch ", " tile ).
+.TP
+.B "backgrounds get"
+Print the wallpaper in use and its mode.
+.TP
 .B "plugin list|install|remove"
 Manage plugins, which teach
 .B riso
 to theme applications it does not know about.
 .TP
-.BI "render " options
-Render a theme into a directory without applying it.
-.TP
-.BI "palette " options
-Print a theme's palette as resolved key and value pairs.
-.TP
-.B "bg set|next|mode|get"
-Change the wallpaper: point the current-background link at an image, cycle
-the theme's set, or state how it is scaled
-.RB ( fill ", " fit ", " center ", " stretch ", " tile ).
-The desktop that draws its own wallpaper is told; a bare compositor is not,
-because the daemon that paints for it is not
-.BR riso 's
-to guess.
-The wallpaper in use is recorded against the theme showing it, so returning
-to that theme returns to that image. A theme applied for the first time
-settles on the first image its directory holds; moving through the rest is
-what
-.B "bg next"
-is for, since applying is also what a shell switch does to retint.
-.TP
-.B "carousel [themes|backgrounds]"
-A full-screen strip of previews to pick from. Runs on
-.BR quickshell ,
-which must be on PATH; everything else ships inside the binary.
+.B "dev palette|render"
+Tools for theme authors: print a theme's palette as resolved key and value
+pairs, or render a theme into a directory without applying it.
 .TP
 .B restore
 Put back every file
@@ -82,6 +104,11 @@ wrote over.
 Put everything back and forget the generated theme. Requires
 .BR \-\-yes .
 .SH OPTIONS
+.TP
+.BI \-o ", " \-\-output " FORMAT"
+How results are printed:
+.BR human " (default), " json ", or " yaml .
+Available on every command, so scripts never parse prose.
 .TP
 .BI \-\-themes " DIR"
 Theme directory. Repeat for more; a later one overlays an earlier one. When
