@@ -284,10 +284,15 @@ fn set_background(
         Some(remembered) => remembered,
         None => {
             let showing = background::current(&link_path);
-            let Some(next) = background::next(&images, showing.as_deref()) else {
+            let Some(first) = background::next(&images, showing.as_deref()) else {
                 return Ok(None);
             };
-            next
+            // The first apply of a theme settles its wallpaper. Applying is
+            // not only how a theme is chosen: a shell switch re-applies to
+            // retint the new shell, and that must not shuffle the desktop.
+            // Advancing through a theme's images is what `bg next` is for.
+            let _ = background::remember(&request.state_dir, name, &first);
+            first
         }
     };
     background::link(&link_path, &chosen)?;
@@ -592,16 +597,23 @@ mod tests {
         }
         let chosen = f.state.join("current/theme/backgrounds/3-dusk.png");
 
-        // First apply takes the first image, as a theme nobody has chosen for.
+        // First apply takes the first image and settles on it.
         let first = apply(&request(&f, "tokyo-night"), &RecordingExecutor::default())
             .expect("apply")
             .background
             .expect("a background");
         assert!(first.ends_with("1-night.png"), "{}", first.display());
 
+        // Re-applying is what a shell switch does, and it must not shuffle.
+        let unchanged = apply(&request(&f, "tokyo-night"), &RecordingExecutor::default())
+            .expect("apply")
+            .background
+            .expect("a background");
+        assert_eq!(unchanged, first, "re-applying moved the wallpaper");
+
         background::remember(&f.state, "tokyo-night", &chosen).expect("remember");
 
-        // Applying again honours the choice instead of advancing the list.
+        // A later choice replaces it.
         let again = apply(&request(&f, "tokyo-night"), &RecordingExecutor::default())
             .expect("apply")
             .background
