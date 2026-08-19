@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.3.0
+Version:        0.3.1
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,11 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Wed Aug 19 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.3.1-1
+- Component-first CLI: theme, backgrounds, plugin, dev, with -o json/yaml
+- Picking is a mode: theme set --gui (carousel) and --tui (terminal picker)
+- A boot keeps the wallpaper it finds instead of advancing past it
+
 * Tue Aug 18 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.3.0-1
 - A theme returns to the wallpaper it was last set to
 
