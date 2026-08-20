@@ -8,32 +8,9 @@
 
   outputs = { self, nixpkgs, flake-utils }:
     let
-      # Shared by the overlay and by packages.default, so a consumer that
-      # applies the overlay gets exactly what this flake builds.
-      risoPackage = pkgs:
-        pkgs.rustPlatform.buildRustPackage {
-          pname = "riso";
-          # Cargo.toml is the one place the version is written.
-          version =
-            (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
-          src = ./.;
-          cargoLock.lockFile = ./Cargo.lock;
-
-          nativeBuildInputs = [ pkgs.installShellFiles ];
-          # The catalog tests drive a real git; the sandbox has none.
-          nativeCheckInputs = [ pkgs.git ];
-          postInstall = ''
-            installManPage docs/riso.1
-            install -Dm644 NOTICE $out/share/doc/riso/NOTICE
-          '';
-          meta = {
-            description = "Modular ricing framework";
-            homepage = "https://github.com/eldios/riso";
-            mainProgram = "riso";
-            license = pkgs.lib.licenses.mit;
-            platforms = pkgs.lib.platforms.unix;
-          };
-        };
+      # Shared by the overlay, packages.default and the nixpkgs submission:
+      # one derivation, defined once. See packaging/package.nix.
+      risoPackage = pkgs: pkgs.callPackage ./packaging/package.nix { };
     in
     {
       overlays.default = final: _prev: {

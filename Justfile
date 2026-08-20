@@ -34,3 +34,8 @@ conformance omarchy_ref="v4.0.0":
 # Regenerate the test fixtures from a checkout of upstream Omarchy.
 fixtures omarchy_ref="v4.0.0":
     ./scripts/update-fixtures.sh {{omarchy_ref}}
+
+# Move every version literal to a new release, then run the same gates as CI.
+# Usage: just release 0.4.0 "changelog line" ["another line"...]
+release version +notes: && ci
+    ./scripts/release.sh {{version}} {{notes}}
