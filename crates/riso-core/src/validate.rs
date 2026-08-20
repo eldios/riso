@@ -305,7 +305,11 @@ fn dangerous_word(line: &str) -> Option<String> {
                     .chars()
                     .next()
                     .is_none_or(|c| !(c.is_ascii_alphanumeric() || "-_.".contains(c)));
-                if boundary {
+                // cava's `source = auto` picks an audio input; no format
+                // includes a file by that name, so the bare word is data.
+                let audio_input = *word == "source"
+                    && after.trim_start().trim_start_matches('=').trim() == "auto";
+                if boundary && !audio_input {
                     return Some((*word).to_owned());
                 }
             }
@@ -462,6 +466,13 @@ mod tests {
         .expect("write");
 
         assert_eq!(findings(&path), vec![]);
+    }
+
+    #[test]
+    fn cavas_audio_source_is_data() {
+        assert_eq!(dangerous_word("source = auto"), None);
+        assert_eq!(dangerous_word("source=auto"), None);
+        assert!(dangerous_word("source = other.conf").is_some());
     }
 
     #[test]
