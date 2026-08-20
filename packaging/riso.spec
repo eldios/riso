@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.3.4
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,10 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Thu Aug 20 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.4.0-1
+- the default catalog moves to catalog.riso.re, decoupled from the hosting
+- the theme gallery lives at catalog.riso.re, the project at riso.re
+
 * Thu Aug 20 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.3.4-1
 - themes without colors.toml derive their palette from alacritty.toml
 - riso-bin joins riso on the AUR, both published by the release CI
