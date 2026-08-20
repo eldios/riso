@@ -31,3 +31,19 @@ jobs:
             target/debian/*.deb
             target/generate-rpm/*.rpm
             riso-*.tar.gz
+
+  aur:
+    needs: packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: publish to the AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: riso
+          pkgbuild: ./packaging/PKGBUILD
+          commit_username: eldios
+          commit_email: emanuele.lele.calo@gmail.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: riso ${{ github.ref_name }}
+          ssh_keyscan_types: rsa,ecdsa,ed25519
