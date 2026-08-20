@@ -9,6 +9,10 @@ use std::path::{Path, PathBuf};
 use crate::error::IoError;
 
 pub fn write_atomic(target: &Path, contents: &str) -> Result<(), IoError> {
+    write_atomic_bytes(target, contents.as_bytes())
+}
+
+pub fn write_atomic_bytes(target: &Path, contents: &[u8]) -> Result<(), IoError> {
     let parent = target
         .parent()
         .filter(|p| !p.as_os_str().is_empty())

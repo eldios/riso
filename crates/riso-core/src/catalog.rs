@@ -171,6 +171,12 @@ pub fn seed_fallback(dir: &Path) -> Result<PathBuf, IoError> {
             crate::atomic::write_atomic(&path, contents)?;
         }
     }
+    for (name, contents) in crate::builtin::FALLBACK_THEME_ASSETS {
+        let path = theme.join(name);
+        if !path.exists() {
+            crate::atomic::write_atomic_bytes(&path, contents)?;
+        }
+    }
 
     Ok(theme)
 }

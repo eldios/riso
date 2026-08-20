@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/riso-logo.png" alt="riso" width="280" />
+</p>
+
 # riso
 
 A ricing framework for Linux desktops. Community-driven, and yours to extend.
@@ -31,21 +35,27 @@ nix profile install github:eldios/riso
 ```bash
 riso theme install rose-pine     # from the catalog
 riso theme install <git-url>     # from anywhere
-riso set "Rose Pine"
+riso theme install --gui         # or browse the catalog with previews
+riso theme set "Rose Pine"
 ```
 
 ```
-riso set <name>              apply a theme and tell the desktop
-riso theme list              what is installed, and what is read-only
-riso bg set|next|mode|get    the wallpaper: which image, and how it scales
-riso carousel                pick a theme or background from previews
-riso theme validate <path>   is this safe to install
-riso plugin list             what teaches riso about more applications
-riso render                  render into a directory without applying
-riso palette                 the resolved palette, key and value
-riso restore                 put back what riso wrote over
-riso uninstall --yes         put everything back and forget the state
+riso theme set <name>            apply a theme and tell the desktop
+riso theme set --gui|--tui       pick from previews: carousel or terminal
+riso theme get|list              what is applied, what is installed
+riso theme update                bring installed themes up to date
+riso theme validate <path>       is this safe to install
+riso backgrounds set|next        the wallpaper: which image...
+riso backgrounds mode|get        ...and how it scales
+riso plugin list                 what teaches riso about more applications
+riso dev palette|render          theme-author tools
+riso restore                     put back what riso wrote over
+riso uninstall --yes             put everything back and forget the state
 ```
+
+Every component has a single-letter alias (`riso t s` is `riso theme set`,
+`backgrounds` also answers to `b`) and every command takes
+`-o human|json|yaml`, so scripts read structure instead of parsing prose.
 
 `riso(1)` has the options.
 
