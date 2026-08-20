@@ -20,6 +20,8 @@
           cargoLock.lockFile = ./Cargo.lock;
 
           nativeBuildInputs = [ pkgs.installShellFiles ];
+          # The catalog tests drive a real git; the sandbox has none.
+          nativeCheckInputs = [ pkgs.git ];
           postInstall = ''
             installManPage docs/riso.1
             install -Dm644 NOTICE $out/share/doc/riso/NOTICE
