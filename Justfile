@@ -1,3 +1,5 @@
+set positional-arguments
+
 # Run `just` with no arguments to see this list.
 default:
     @just --list
@@ -38,7 +40,7 @@ fixtures omarchy_ref="v4.0.0":
 # Move every version literal to a new release, then run the same gates as CI.
 # Usage: just release 0.4.0 "changelog line" ["another line"...]
 release version +notes: && ci
-    ./scripts/release.sh {{version}} {{notes}}
+    ./scripts/release.sh "$@"
 
 # Sync the AUR package to the released version; run after the tag is pushed.
 aur:
