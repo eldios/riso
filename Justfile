@@ -24,7 +24,7 @@ test:
 # Render a theme, for a quick look. Templates live upstream for now, so point
 # at a checkout: `just render <theme-dir> <out-dir> target/omarchy-v4.0.0/default/themed`
 render theme out templates:
-    nice -n 19 cargo run -q -p riso-cli -- render --theme {{theme}} --out {{out}} --templates {{templates}}
+    nice -n 19 cargo run -q -p riso-cli -- dev render --theme {{theme}} --out {{out}} --templates {{templates}}
 
 # Compare riso against the real Omarchy pipeline on every shipped theme.
 # Needs git and a network fetch of the upstream repo; see the script header.
