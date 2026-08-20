@@ -151,10 +151,57 @@ fn locate(name: &str, theme_dirs: &[PathBuf]) -> Vec<PathBuf> {
         .collect()
 }
 
+/// A name reduced to what no spelling can disagree on: its letters and
+/// digits, lowercased.
+fn loose(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
+}
+
+/// The directory name `folded` denotes, when the folded spelling itself is
+/// not on disk: the one theme directory whose loose form matches. Menus and
+/// hands spell names in ways folding alone cannot predict ("CyberPunkRED"
+/// for a `cyberpunk-red` directory), so the comparison loosens both sides.
+/// More than one distinct match is nobody's guess to make: none is returned.
+fn resolve_name(folded: &str, theme_dirs: &[PathBuf]) -> Option<String> {
+    let wanted = loose(folded);
+    let mut found: Option<String> = None;
+
+    for dir in theme_dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            if !entry.path().is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if loose(&name) == wanted {
+                match &found {
+                    Some(existing) if *existing != name => return None,
+                    _ => found = Some(name),
+                }
+            }
+        }
+    }
+    found
+}
+
 /// Apply `request.name`, in whole or in the parts the request names.
 pub fn apply(request: &Request, exec: &dyn Executor) -> Result<Applied, ApplyError> {
-    let name = normalize_name(&request.name);
-    let sources = locate(&name, &request.theme_dirs);
+    let mut name = normalize_name(&request.name);
+    let mut sources = locate(&name, &request.theme_dirs);
+    if sources.is_empty() {
+        match resolve_name(&name, &request.theme_dirs) {
+            Some(resolved) => {
+                sources = locate(&resolved, &request.theme_dirs);
+                name = resolved;
+            }
+            None => return Err(ApplyError::NotFound(name)),
+        }
+    }
     if sources.is_empty() {
         return Err(ApplyError::NotFound(name));
     }
@@ -540,6 +587,30 @@ mod tests {
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o644, "store permissions must not propagate");
+    }
+
+    #[test]
+    fn a_camelcase_spelling_finds_the_dashed_directory() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join("cyberpunk-red")).expect("mkdir");
+        let dirs = vec![dir.path().to_path_buf()];
+        assert_eq!(
+            resolve_name(&normalize_name("CyberPunkRED"), &dirs).as_deref(),
+            Some("cyberpunk-red")
+        );
+        assert_eq!(
+            resolve_name(&normalize_name("Cyberpunk Red"), &dirs).as_deref(),
+            Some("cyberpunk-red")
+        );
+    }
+
+    #[test]
+    fn two_directories_matching_loosely_resolve_to_neither() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join("tokyo-night")).expect("mkdir");
+        std::fs::create_dir(dir.path().join("tokyonight")).expect("mkdir");
+        let dirs = vec![dir.path().to_path_buf()];
+        assert_eq!(resolve_name("tokyo.night", &dirs), None);
     }
 
     #[test]
