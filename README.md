@@ -52,9 +52,15 @@ cargo build --release && cargo generate-rpm && sudo rpm -i target/generate-rpm/*
 <details>
 <summary>NixOS</summary>
 
+Try it without installing anything:
+
 ```bash
-nix profile install github:eldios/riso
+nix run github:eldios/riso -- theme list
 ```
+
+To keep it, add `github:eldios/riso` as a flake input and pull
+`overlays.default` (or `packages.<system>.default`) into your NixOS or
+home-manager configuration.
 
 </details>
 
