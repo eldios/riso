@@ -13,7 +13,9 @@
       risoPackage = pkgs:
         pkgs.rustPlatform.buildRustPackage {
           pname = "riso";
-          version = "0.3.1";
+          # Cargo.toml is the one place the version is written.
+          version =
+            (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
