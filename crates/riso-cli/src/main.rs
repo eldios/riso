@@ -3,6 +3,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+mod check;
 mod data;
 mod gui;
 mod output;
@@ -96,6 +97,13 @@ enum ConfigAction {
     /// Print every option and its value
     #[command(visible_alias = "l")]
     List,
+    /// Can this system carry riso: tools, desktop, and include wiring
+    #[command(visible_alias = "k")]
+    Check {
+        /// Where the generated theme lives
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+    },
     /// Print one option's value
     #[command(visible_alias = "g")]
     Get { key: String },
@@ -990,6 +998,17 @@ fn run_config(action: Option<ConfigAction>, output: OutputFormat) -> Result<(), 
     use riso_core::config::Config;
 
     match action.unwrap_or(ConfigAction::List) {
+        ConfigAction::Check { state } => {
+            let state_dir = state_or_default(state)?;
+            let checks = check::run(&state_dir, &catalog::default_theme_dirs(), DEFAULT_CATALOG);
+            if !emit(output, &checks)? {
+                check::print(&checks);
+            }
+            if checks.iter().any(|c| c.required && !c.ok) {
+                return Err("a required tool is missing".to_owned());
+            }
+            Ok(())
+        }
         ConfigAction::List => {
             let config = Config::load()?;
             if !emit(output, &config)? {

@@ -111,7 +111,7 @@ Manage plugins, which teach
 .B riso
 to theme applications it does not know about.
 .TP
-.B "config [list|get|set]"
+.B "config [list|get|set|check]"
 Read and change the few options kept in
 .IR ~/.config/riso/config.toml :
 .B output
@@ -123,6 +123,13 @@ is not given) and
 .B false
 to keep Omarchy's theme directories out of the search path). Everything
 situational stays a flag.
+.B config check
+inspects the system instead of the file: the tools riso calls, the
+desktop it recognized, the themes and catalog it can reach, and for
+every themable application found installed, whether its config actually
+reads the rendered fragment, printing the exact include line when it
+does not. The exit status is nonzero only when a required tool is
+missing.
 .TP
 .B "dev palette|render"
 Tools for theme authors: print a theme's palette as resolved key and value

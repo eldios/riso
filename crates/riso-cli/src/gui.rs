@@ -66,5 +66,11 @@ pub fn run(what: What, purpose: Purpose) -> Result<(), String> {
         .env("RISO_CAROUSEL_APPLY", apply)
         .env("RISO_CAROUSEL_CURRENT", current)
         .exec();
-    Err(format!("could not run quickshell: {error}"))
+    Err(if error.kind() == std::io::ErrorKind::NotFound {
+        "quickshell is not installed: the --gui carousel runs on it. \
+         Install quickshell, or use --tui for the terminal picker."
+            .to_owned()
+    } else {
+        format!("could not run quickshell: {error}")
+    })
 }

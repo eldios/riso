@@ -154,6 +154,7 @@ riso theme set --tui
 | `riso plugin list` | what teaches riso about more applications |
 | `riso dev palette\|render` | theme-author tools |
 | `riso config` | the few persistent options |
+| `riso config check` | can this system carry riso, and how to fix it |
 | `riso restore` | put back what riso wrote over |
 | `riso uninstall --yes` | put everything back and forget the state |
 
