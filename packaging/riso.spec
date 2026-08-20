@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.4.0
+Version:        0.4.1
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,11 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Fri Aug 21 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.4.1-1
+- theme names match loosely: CyberPunkRED finds cyberpunk-red
+- riso config check reports missing tools and the include lines to add
+- a friendlier error when --gui runs without quickshell
+
 * Thu Aug 20 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.4.0-1
 - the default catalog moves to catalog.riso.re, decoupled from the hosting
 - the theme gallery lives at catalog.riso.re, the project at riso.re
