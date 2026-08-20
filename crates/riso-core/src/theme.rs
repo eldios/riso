@@ -55,7 +55,19 @@ impl Report {
 /// Read and resolve `colors.toml` from a theme directory.
 pub fn load_palette(theme_dir: &Path) -> Result<(Palette, Vec<Warning>), IoError> {
     let path = theme_dir.join(PALETTE_FILE);
-    let raw = std::fs::read_to_string(&path).map_err(|e| IoError::Read(path.clone(), e))?;
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        // A theme can carry its palette as a terminal config alone; the
+        // derivation mirrors Omarchy's, so both pipelines see one palette.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let fallback = theme_dir.join("alacritty.toml");
+            std::fs::read_to_string(&fallback)
+                .ok()
+                .and_then(|text| crate::alacritty::derive_palette(&text))
+                .ok_or(IoError::Read(path.clone(), e))?
+        }
+        Err(e) => return Err(IoError::Read(path.clone(), e)),
+    };
 
     let (palette, mut warnings) = Palette::parse(&raw);
     let (palette, resolution_warnings) =

@@ -125,7 +125,7 @@ impl Finding {
                 format!("{}:{line}: path leaves the theme: {text}", path.display())
             }
             Self::Symlink(path) => format!("{}: is a symlink", path.display()),
-            Self::NoPalette => "no colors.toml: this is not a theme".to_owned(),
+            Self::NoPalette => "no colors.toml or alacritty.toml: this is not a theme".to_owned(),
             Self::NoLicense => "no LICENSE file".to_owned(),
             Self::FileTooLarge { path, bytes } => {
                 format!(

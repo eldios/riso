@@ -197,6 +197,12 @@ and
 A theme found later shadows one of the same name found earlier, so a user's
 copy always wins over what a package shipped.
 .PP
+A theme that carries no
+.I colors.toml
+but does carry an
+.I alacritty.toml
+derives its palette from the terminal colors, exactly the way Omarchy does.
+.PP
 When the whole path turns up nothing, the theme compiled into
 .B riso
 is written to the user directory as an ordinary editable theme, so applying a

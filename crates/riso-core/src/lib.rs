@@ -4,6 +4,7 @@
 //! Nothing here runs a process or reads the environment, so every part is
 //! testable without a graphical session.
 
+pub mod alacritty;
 pub mod apply;
 pub mod atomic;
 pub mod background;

@@ -206,7 +206,7 @@ pub fn installed(theme_dirs: &[PathBuf], writable: Option<&Path>) -> Vec<Install
         };
         for entry in entries.filter_map(Result::ok) {
             let path = entry.path();
-            if !path.join(PALETTE_FILE).is_file() {
+            if !path.join(PALETTE_FILE).is_file() && !path.join("alacritty.toml").is_file() {
                 continue;
             }
             let name = entry.file_name().to_string_lossy().into_owned();
