@@ -39,7 +39,8 @@ the files your desktop reads.
 
 ## Install
 
-### Arch and the Arch family
+<details>
+<summary><strong>Arch and the Arch family</strong></summary>
 
 One AUR package serves the whole family:
 [`riso`](https://aur.archlinux.org/packages/riso) builds from source
@@ -67,6 +68,8 @@ cd riso && makepkg -si
 > The source package verifies the release tag against the maintainer
 > key: `gpg --recv-keys AA6BC7743F8F9AD84BBA15C72CCBF4B71EFFDD46` once
 > before the first build.
+
+</details>
 
 <details>
 <summary><strong>NixOS</strong></summary>
