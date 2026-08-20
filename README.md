@@ -18,8 +18,7 @@
   <a href="#quick-start">Quick start</a> &middot;
   <a href="#commands">Commands</a> &middot;
   <a href="#how-a-theme-is-put-together">How it works</a> &middot;
-  <a href="#extending">Extending</a> &middot;
-  <a href="#status">Status</a>
+  <a href="#extending">Extending</a>
 </p>
 
 > screenshot placeholder: one desktop, three themes, side by side
@@ -184,10 +183,3 @@ nix develop        # toolchain plus every tool the gates need
 just ci            # format, lint, tests
 just conformance   # the interoperability check
 ```
-
-## Status
-
-A young project that says so. Everything documented above is built and
-tested: rendering, applying, backgrounds, themes, plugins, ownership
-tracking, validation, the carousel. Not built yet: turning the desktop you
-are looking at into an installable theme, and support for more desktops.
