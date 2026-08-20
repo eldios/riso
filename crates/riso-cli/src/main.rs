@@ -411,8 +411,7 @@ fn run_plugin(action: PluginAction, output: OutputFormat) -> Result<(), String> 
 }
 
 /// Where `theme install` puts things, and the first place `set` looks.
-pub(crate) const DEFAULT_CATALOG: &str =
-    "https://raw.githubusercontent.com/eldios/riso-themes/main/index.json";
+pub(crate) const DEFAULT_CATALOG: &str = "https://catalog.riso.re/index.json";
 
 fn home_dir() -> Result<PathBuf, String> {
     std::env::var("HOME")
