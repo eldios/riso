@@ -18,26 +18,13 @@ pub const FALLBACK_THEME_FILES: &[(&str, &str)] = &[
     ("LICENSE", include_str!("../themes/plain/LICENSE")),
 ];
 
-/// The fallback theme's wallpapers: the mascot on each of its flat colors.
-/// Binary data, kept apart from the text files above.
-pub const FALLBACK_THEME_ASSETS: &[(&str, &[u8])] = &[
-    (
-        "backgrounds/1-riso-black.png",
-        include_bytes!("../themes/plain/backgrounds/1-riso-black.png"),
-    ),
-    (
-        "backgrounds/2-riso-green.png",
-        include_bytes!("../themes/plain/backgrounds/2-riso-green.png"),
-    ),
-    (
-        "backgrounds/3-riso-orange.png",
-        include_bytes!("../themes/plain/backgrounds/3-riso-orange.png"),
-    ),
-    (
-        "backgrounds/4-riso-red.png",
-        include_bytes!("../themes/plain/backgrounds/4-riso-red.png"),
-    ),
-];
+/// The fallback theme's wallpaper: the mascot on black. One image, quantized
+/// small, because this theme exists to keep a bare system working, not to be
+/// a gallery. Binary data, kept apart from the text files above.
+pub const FALLBACK_THEME_ASSETS: &[(&str, &[u8])] = &[(
+    "backgrounds/1-riso-black.png",
+    include_bytes!("../themes/plain/backgrounds/1-riso-black.png"),
+)];
 
 /// A template compiled into the binary, named by what it produces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
