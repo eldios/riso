@@ -10,6 +10,7 @@ pub mod background;
 pub mod builtin;
 pub mod catalog;
 pub mod color;
+pub mod config;
 pub mod desktop;
 pub mod error;
 pub mod gradient;

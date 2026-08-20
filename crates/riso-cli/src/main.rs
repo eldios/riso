@@ -20,15 +20,9 @@ use riso_core::theme::{load_palette, render_theme, Options as RenderOptions, Out
 #[derive(Parser)]
 #[command(name = "riso", version, about = "Modular ricing framework")]
 struct Cli {
-    /// Output format for results
-    #[arg(
-        short = 'o',
-        long = "output",
-        global = true,
-        value_enum,
-        default_value_t
-    )]
-    output: OutputFormat,
+    /// Output format for results; defaults to `output` in config.toml
+    #[arg(short = 'o', long = "output", global = true, value_enum)]
+    output: Option<OutputFormat>,
     #[command(subcommand)]
     command: Command,
 }
@@ -59,6 +53,16 @@ enum Command {
         #[command(subcommand)]
         action: DevAction,
     },
+    /// Read and change riso's few options, kept in config.toml
+    #[command(
+        visible_alias = "c",
+        after_help = "The options live in ~/.config/riso/config.toml and stay few on purpose.\n\
+                      Everything situational is a flag: see riso(1) or the project README."
+    )]
+    Config {
+        #[command(subcommand)]
+        action: Option<ConfigAction>,
+    },
     /// Put back everything riso wrote over
     Restore {
         /// Where the generated theme lives
@@ -85,6 +89,19 @@ enum Command {
         #[arg(long)]
         current: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Print every option and its value
+    #[command(visible_alias = "l")]
+    List,
+    /// Print one option's value
+    #[command(visible_alias = "g")]
+    Get { key: String },
+    /// Change an option
+    #[command(visible_alias = "s")]
+    Set { key: String, value: String },
 }
 
 #[derive(Subcommand)]
@@ -899,13 +916,86 @@ pub(crate) fn default_state_dir() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join(".local/state").join(name))
 }
 
+/// The format config.toml asks for, when `-o` does not override it. A value
+/// the enum does not know is reported and ignored, never fatal.
+fn default_output() -> OutputFormat {
+    let config = riso_core::config::Config::load_or_default();
+    match <OutputFormat as clap::ValueEnum>::from_str(&config.output, true) {
+        Ok(format) => format,
+        Err(_) => {
+            eprintln!(
+                "riso: config.toml asks for output {:?}, which is not human, json or yaml; using human",
+                config.output
+            );
+            OutputFormat::Human
+        }
+    }
+}
+
+fn run_config(action: Option<ConfigAction>, output: OutputFormat) -> Result<(), String> {
+    use riso_core::config::Config;
+
+    match action.unwrap_or(ConfigAction::List) {
+        ConfigAction::List => {
+            let config = Config::load()?;
+            if !emit(output, &config)? {
+                println!("omarchy-themes = {}", config.omarchy_themes);
+                println!("output = {}", config.output);
+            }
+            Ok(())
+        }
+        ConfigAction::Get { key } => {
+            let config = Config::load()?;
+            let value = match key.as_str() {
+                "omarchy-themes" => config.omarchy_themes.to_string(),
+                "output" => config.output,
+                other => {
+                    return Err(format!(
+                        "unknown option {other}; `riso config` lists them all"
+                    ))
+                }
+            };
+            if !emit(output, &serde_json::json!({ key: value }))? {
+                println!("{value}");
+            }
+            Ok(())
+        }
+        ConfigAction::Set { key, value } => {
+            let mut config = Config::load()?;
+            match key.as_str() {
+                "omarchy-themes" => {
+                    config.omarchy_themes = value.parse().map_err(|_| {
+                        format!("omarchy-themes takes true or false, not {value:?}")
+                    })?;
+                }
+                "output" => {
+                    <OutputFormat as clap::ValueEnum>::from_str(&value, true)
+                        .map_err(|_| format!("output takes human, json or yaml, not {value:?}"))?;
+                    config.output = value.to_lowercase();
+                }
+                other => {
+                    return Err(format!(
+                        "unknown option {other}; `riso config` lists them all"
+                    ))
+                }
+            }
+            let path = config.save().map_err(|e| e.to_string())?;
+            if !emit(output, &serde_json::json!({ "wrote": path }))? {
+                println!("wrote {}", path.display());
+            }
+            Ok(())
+        }
+    }
+}
+
 fn run(cli: Cli) -> Result<(), String> {
-    let output = cli.output;
+    let output = cli.output.unwrap_or_else(default_output);
     match cli.command {
         Command::Theme { action } => run_theme(action, output),
         Command::Backgrounds { action } => run_bg(action, output),
         Command::Plugin { action } => run_plugin(action, output),
         Command::Dev { action } => run_dev(action, output),
+        Command::Config { action } => run_config(action, output),
         Command::Restore { state, path } => {
             let state_dir = match state {
                 Some(dir) => dir,

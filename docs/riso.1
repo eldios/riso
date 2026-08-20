@@ -1,4 +1,4 @@
-.TH RISO 1 "2026-08-18" "riso 0.3.1" "User Commands"
+.TH RISO 1 "2026-08-20" "riso 0.3.2" "User Commands"
 .SH NAME
 riso \- modular ricing framework
 .SH SYNOPSIS
@@ -107,6 +107,19 @@ Manage plugins, which teach
 .B riso
 to theme applications it does not know about.
 .TP
+.B "config [list|get|set]"
+Read and change the few options kept in
+.IR ~/.config/riso/config.toml :
+.B output
+(the format used when
+.B \-o
+is not given) and
+.B omarchy\-themes
+(set it to
+.B false
+to keep Omarchy's theme directories out of the search path). Everything
+situational stays a flag.
+.TP
 .B "dev palette|render"
 Tools for theme authors: print a theme's palette as resolved key and value
 pairs, or render a theme into a directory without applying it.
@@ -123,8 +136,14 @@ Put everything back and forget the generated theme. Requires
 .TP
 .BI \-o ", " \-\-output " FORMAT"
 How results are printed:
-.BR human " (default), " json ", or " yaml .
-Available on every command, so scripts never parse prose.
+.BR human ", " json ", or " yaml .
+Available on every command, so scripts never parse prose. When not given, the
+.B output
+option in
+.I config.toml
+decides, and
+.B human
+is the default.
 .TP
 .BI \-\-themes " DIR"
 Theme directory. Repeat for more; a later one overlays an earlier one. When
@@ -162,6 +181,10 @@ Without
 themes are looked up on a search path, weakest first:
 .IR /usr/share/riso/themes ,
 .IR /etc/riso/themes ,
+Omarchy's theme directories when that desktop is present
+(unless the
+.B omarchy\-themes
+option says otherwise),
 the directories named by
 .BR RISO_THEMES ,
 .IR $XDG_DATA_HOME/riso/themes ,
@@ -182,6 +205,11 @@ a session points
 .B riso
 at the themes it ships.
 .SH FILES
+.TP
+.I ~/.config/riso/config.toml
+The options
+.B riso config
+manages.
 .TP
 .I ~/.config/riso/themes
 Themes installed by the user.

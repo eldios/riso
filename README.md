@@ -33,10 +33,10 @@ nix profile install github:eldios/riso
 ## Use
 
 ```bash
-riso theme install rose-pine     # from the catalog
+riso theme install caio          # from the catalog
 riso theme install <git-url>     # from anywhere
 riso theme install --gui         # or browse the catalog with previews
-riso theme set "Rose Pine"
+riso theme set caio
 ```
 
 ```
@@ -49,6 +49,7 @@ riso backgrounds set|next        the wallpaper: which image...
 riso backgrounds mode|get        ...and how it scales
 riso plugin list                 what teaches riso about more applications
 riso dev palette|render          theme-author tools
+riso config                      the few persistent options
 riso restore                     put back what riso wrote over
 riso uninstall --yes             put everything back and forget the state
 ```
@@ -57,7 +58,9 @@ Every component has a single-letter alias (`riso t s` is `riso theme set`,
 `backgrounds` also answers to `b`) and every command takes
 `-o human|json|yaml`, so scripts read structure instead of parsing prose.
 
-`riso(1)` has the options.
+`riso(1)` has the options. The handful worth keeping live in
+`~/.config/riso/config.toml`, managed by `riso config`: the default output
+format, and `omarchy-themes` to keep Omarchy's own themes out of the list.
 
 ## How a theme is put together
 
