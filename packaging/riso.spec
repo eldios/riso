@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.3.1
+Version:        0.3.2
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,11 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Thu Aug 20 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.3.2-1
+- riso config: config.toml with the default output format and an
+  omarchy-themes switch to drop Omarchy's directories from the search path
+- The built-in fallback theme slims to one small wallpaper
+
 * Wed Aug 19 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.3.1-1
 - Component-first CLI: theme, backgrounds, plugin, dev, with -o json/yaml
 - Picking is a mode: theme set --gui (carousel) and --tui (terminal picker)
