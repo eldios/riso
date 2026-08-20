@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.3.3
+Version:        0.3.4
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,11 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Thu Aug 20 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.3.4-1
+- themes without colors.toml derive their palette from alacritty.toml
+- riso-bin joins riso on the AUR, both published by the release CI
+- cava's source = auto no longer needs --trust
+
 * Thu Aug 20 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.3.3-1
 - theme update narrates progress per theme and overall, -q for scripts
 - nonzero exit when an update fails or is refused
