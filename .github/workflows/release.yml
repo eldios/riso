@@ -47,3 +47,21 @@ jobs:
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: riso ${{ github.ref_name }}
           ssh_keyscan_types: rsa,ecdsa,ed25519
+
+  aur-bin:
+    needs: packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: pin checksums against the released artifacts
+        run: ./scripts/pin-bin-sums.sh packaging/PKGBUILD-bin
+      - name: publish to the AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: riso-bin
+          pkgbuild: ./packaging/PKGBUILD-bin
+          commit_username: eldios
+          commit_email: emanuele.lele.calo@gmail.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: riso-bin ${{ github.ref_name }}
+          ssh_keyscan_types: rsa,ecdsa,ed25519

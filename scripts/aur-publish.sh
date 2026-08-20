@@ -15,21 +15,33 @@ fi
 
 cp "$REPO/packaging/PKGBUILD" "$AUR_DIR/PKGBUILD"
 
-cd "$AUR_DIR"
-if command -v makepkg > /dev/null; then
-  makepkg --printsrcinfo > .SRCINFO
-else
-  # NixOS has no /etc/makepkg.conf; the pacman package ships one.
-  # shellcheck disable=SC2016
-  nix-shell -p pacman --run \
-    'MAKEPKG_CONF="$(dirname "$(dirname "$(command -v makepkg)")")/etc/makepkg.conf" makepkg --printsrcinfo' \
-    > .SRCINFO
+BIN_DIR=${AUR_BIN_DIR:-$REPO/../aur-riso-bin}
+if [ ! -d "$BIN_DIR/.git" ]; then
+  git clone "ssh://aur@aur.archlinux.org/riso-bin.git" "$BIN_DIR"
 fi
+cp "$REPO/packaging/PKGBUILD-bin" "$BIN_DIR/PKGBUILD"
+"$REPO/scripts/pin-bin-sums.sh" "$BIN_DIR/PKGBUILD"
 
-git add PKGBUILD .SRCINFO
-if git diff --cached --quiet; then
-  echo "aur-publish: already at $VERSION, nothing to commit"
-else
-  git commit -m "riso $VERSION"
-  echo "committed; publish with: git -C $AUR_DIR push origin master"
-fi
+publish() {
+  cd "$1"
+  if command -v makepkg > /dev/null; then
+    makepkg --printsrcinfo > .SRCINFO
+  else
+    # NixOS has no /etc/makepkg.conf; the pacman package ships one.
+    # shellcheck disable=SC2016
+    nix-shell -p pacman --run \
+      'MAKEPKG_CONF="$(dirname "$(dirname "$(command -v makepkg)")")/etc/makepkg.conf" makepkg --printsrcinfo' \
+      > .SRCINFO
+  fi
+
+  git add PKGBUILD .SRCINFO
+  if git diff --cached --quiet; then
+    echo "aur-publish: $1 already at $VERSION, nothing to commit"
+  else
+    git commit -m "$(basename "$1" | sed s/^aur-//) $VERSION"
+    echo "committed; publish with: git -C $1 push origin master"
+  fi
+}
+
+publish "$AUR_DIR"
+publish "$BIN_DIR"

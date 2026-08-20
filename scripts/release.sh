@@ -24,7 +24,7 @@ RPMDATE=$(LC_ALL=C date '+%a %b %d %Y')
 
 sed -i "s/^version = \".*\"$/version = \"$VERSION\"/" Cargo.toml
 sed -i "s/^\.TH RISO 1 \"[^\"]*\" \"riso [^\"]*\"/.TH RISO 1 \"$MANDATE\" \"riso $VERSION\"/" docs/riso.1
-sed -i "s/^pkgver=.*/pkgver=$VERSION/" packaging/PKGBUILD
+sed -i "s/^pkgver=.*/pkgver=$VERSION/" packaging/PKGBUILD packaging/PKGBUILD-bin
 sed -i "s/^Version:.*/Version:        $VERSION/" packaging/riso.spec
 
 ENTRY="* $RPMDATE Emanuele Calo <emanuele.lele.calo@gmail.com> - $VERSION-1"
