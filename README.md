@@ -21,7 +21,9 @@
   <a href="#extending">Extending</a>
 </p>
 
-> screenshot placeholder: one desktop, three themes, side by side
+<p align="center">
+  <img src="assets/screenshot-caio.png" alt="the caio theme applied: btop, fastfetch and the wallpaper all in the same palette" width="920" />
+</p>
 
 ## Quick start
 
@@ -74,7 +76,9 @@ riso theme install <git-url>     # from anywhere
 riso theme install --gui         # or browse the catalog with previews
 ```
 
-> screenshot placeholder: the --gui carousel
+<p align="center">
+  <img src="assets/screenshot-carousel.png" alt="riso theme set --gui: the carousel of theme previews" width="920" />
+</p>
 
 ## Why a framework and not a folder of dotfiles
 
