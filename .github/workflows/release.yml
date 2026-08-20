@@ -10,7 +10,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: packaging tools
@@ -25,7 +25,7 @@ jobs:
         run: |
           tar -C target/release -czf "riso-${GITHUB_REF_NAME}-x86_64-linux.tar.gz" riso
       - name: release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             target/debian/*.deb
@@ -36,7 +36,7 @@ jobs:
     needs: packages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: publish to the AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
         with:
@@ -52,7 +52,7 @@ jobs:
     needs: packages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: pin checksums against the released artifacts
         run: ./scripts/pin-bin-sums.sh packaging/PKGBUILD-bin
       - name: publish to the AUR
