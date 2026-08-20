@@ -67,7 +67,11 @@ same gate.
 Bring installed themes to where they came from: the revision the catalog
 pins for themes it carries, the origin's tip for the rest. What arrives
 passes the same safety gate an install does; an update that fails it is
-rolled back to the revision that was trusted.
+rolled back to the revision that was trusted. Each theme is narrated as
+it is checked;
+.B \-q
+prints nothing at all and leaves the verdict to the exit status, which
+is nonzero when any update failed or was refused.
 .TP
 .BI "theme validate " path
 Report anything that would make a theme unsafe to install.

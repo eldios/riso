@@ -246,6 +246,9 @@ enum ThemeAction {
         /// Keep an update the safety check would refuse
         #[arg(long)]
         trust: bool,
+        /// Print nothing; the exit code alone says how it went
+        #[arg(short, long)]
+        quiet: bool,
     },
     /// Check that a theme is data and nothing else
     #[command(visible_alias = "v")]
@@ -729,6 +732,7 @@ fn run_theme(action: ThemeAction, output: OutputFormat) -> Result<(), String> {
             into,
             catalog: index_url,
             trust,
+            quiet,
         } => {
             let into = match into {
                 Some(dir) => dir,
@@ -755,8 +759,23 @@ fn run_theme(action: ThemeAction, output: OutputFormat) -> Result<(), String> {
                 }
             }
 
+            // Three voices: -q says nothing and lets the exit code speak,
+            // -o json/yaml keeps the machine report, and plain human mode
+            // narrates each theme as it happens.
+            let verbose = !quiet && output == OutputFormat::Human;
+            let total = targets.len();
+            let short = |rev: &str| rev[..rev.len().min(7)].to_owned();
+            if verbose {
+                println!(
+                    "updating {total} theme{} in {}",
+                    if total == 1 { "" } else { "s" },
+                    into.display()
+                );
+            }
+
             let mut report = Vec::new();
-            for path in targets {
+            let (mut updated, mut current, mut skipped, mut failed) = (0, 0, 0, 0);
+            for (i, path) in targets.iter().enumerate() {
                 let theme = path
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
@@ -765,41 +784,78 @@ fn run_theme(action: ThemeAction, output: OutputFormat) -> Result<(), String> {
                     .as_ref()
                     .and_then(|i| i.find(&theme))
                     .and_then(|e| e.rev.as_deref().map(str::to_owned));
-                let outcome =
-                    match catalog::update_from_git(&ProcessExecutor, &path, rev.as_deref()) {
-                        Ok(outcome) => outcome,
-                        Err(error) => {
+                if verbose {
+                    print!("[{}/{total}] {theme}: fetching... ", i + 1);
+                    use std::io::Write;
+                    std::io::stdout().flush().ok();
+                }
+                let outcome = match catalog::update_from_git(&ProcessExecutor, path, rev.as_deref())
+                {
+                    Ok(outcome) => outcome,
+                    Err(error) => {
+                        failed += 1;
+                        if verbose {
+                            println!("failed: {error}");
+                        } else if !quiet {
                             eprintln!("riso: {theme}: {error}");
-                            report.push(serde_json::json!({ "theme": theme, "result": "failed" }));
-                            continue;
                         }
-                    };
+                        report.push(serde_json::json!({ "theme": theme, "result": "failed" }));
+                        continue;
+                    }
+                };
                 let result = match outcome {
                     catalog::Updated::NotAClone => {
+                        skipped += 1;
+                        if verbose {
+                            println!("not a git clone, skipped");
+                        }
                         serde_json::json!({ "theme": theme, "result": "no git history" })
                     }
                     catalog::Updated::Current => {
+                        current += 1;
+                        if verbose {
+                            println!("already up to date");
+                        }
                         serde_json::json!({ "theme": theme, "result": "up to date" })
                     }
                     catalog::Updated::Moved { from, to } => {
                         // What arrived passes the same gate an install does;
                         // an update that turns a theme into a program goes
                         // back to the revision that was trusted.
-                        let findings = riso_core::validate::validate(&path, &Default::default())
+                        if verbose {
+                            print!("validating {}... ", short(&to));
+                            use std::io::Write;
+                            std::io::stdout().flush().ok();
+                        }
+                        let findings = riso_core::validate::validate(path, &Default::default())
                             .map_err(|e| e.to_string())?;
                         let fatal = findings.iter().filter(|f| f.is_fatal()).count();
-                        for finding in findings.iter().filter(|f| f.is_fatal()) {
-                            eprintln!("riso: REFUSE {theme}: {}", finding.describe());
+                        if !quiet {
+                            for finding in findings.iter().filter(|f| f.is_fatal()) {
+                                if verbose {
+                                    println!();
+                                }
+                                eprintln!("riso: REFUSE {theme}: {}", finding.describe());
+                            }
                         }
                         if fatal > 0 && !trust {
-                            catalog::rollback(&ProcessExecutor, &path, &from)
+                            failed += 1;
+                            catalog::rollback(&ProcessExecutor, path, &from)
                                 .map_err(|e| e.to_string())?;
-                            eprintln!(
-                                "riso: {theme}: update refused ({fatal} finding(s)), kept {}",
-                                &from[..from.len().min(7)]
-                            );
+                            if verbose {
+                                println!("refused ({fatal} finding(s)), kept {}", short(&from));
+                            } else if !quiet {
+                                eprintln!(
+                                    "riso: {theme}: update refused ({fatal} finding(s)), kept {}",
+                                    short(&from)
+                                );
+                            }
                             serde_json::json!({ "theme": theme, "result": "refused" })
                         } else {
+                            updated += 1;
+                            if verbose {
+                                println!("updated {} -> {}", short(&from), short(&to));
+                            }
                             serde_json::json!({
                                 "theme": theme,
                                 "result": "updated",
@@ -812,20 +868,19 @@ fn run_theme(action: ThemeAction, output: OutputFormat) -> Result<(), String> {
                 report.push(result);
             }
 
-            if !emit(output, &report)? {
-                for entry in &report {
-                    let theme = entry["theme"].as_str().unwrap_or_default();
-                    match entry["result"].as_str().unwrap_or_default() {
-                        "updated" => println!(
-                            "updated {theme} ({} -> {})",
-                            &entry["from"].as_str().unwrap_or_default()
-                                [..entry["from"].as_str().map_or(0, |s| s.len().min(7))],
-                            &entry["to"].as_str().unwrap_or_default()
-                                [..entry["to"].as_str().map_or(0, |s| s.len().min(7))]
-                        ),
-                        other => println!("{theme}: {other}"),
-                    }
+            if verbose {
+                println!(
+                    "{updated} updated, {current} already current, {skipped} skipped, {failed} failed"
+                );
+            }
+            if !quiet && output != OutputFormat::Human {
+                emit(output, &report)?;
+            }
+            if failed > 0 {
+                if quiet {
+                    std::process::exit(1);
                 }
+                return Err(format!("{failed} theme update(s) did not go through"));
             }
             Ok(())
         }
