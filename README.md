@@ -41,17 +41,22 @@ the files your desktop reads.
 
 ### Arch and the Arch family
 
-Omarchy, CachyOS, EndeavourOS, Manjaro, Garuda and every other
-derivative install from the AUR: [`riso`](https://aur.archlinux.org/packages/riso)
-builds from source and verifies the PGP-signed release tag,
+One AUR package serves the whole family:
+[`riso`](https://aur.archlinux.org/packages/riso) builds from source
+and verifies the PGP-signed release tag,
 [`riso-bin`](https://aur.archlinux.org/packages/riso-bin) ships the
-prebuilt binary.
+prebuilt binary. Each member has its own front door:
 
-```bash
-paru -S riso
-```
+| Distro | Install | Worth knowing |
+| --- | --- | --- |
+| Arch | `paru -S riso` | any AUR helper works, `yay` included |
+| Omarchy | `omarchy pkg add riso` | or the menu, Install > AUR; updates go through `omarchy update`, AUR packages included |
+| EndeavourOS | `yay -S riso` | `yay` comes preinstalled |
+| CachyOS | `paru -S riso` | `paru` comes preinstalled |
+| Garuda | `paru -S riso` | update with `garuda-update --aur` |
+| Manjaro | `pamac build riso` | enable AUR in pamac's preferences first; Manjaro's repos lag Arch and its team does not support the AUR |
 
-`yay` works the same. Without a helper, clone and build:
+Without a helper, clone and build:
 
 ```bash
 git clone https://aur.archlinux.org/riso.git
