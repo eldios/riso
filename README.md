@@ -11,14 +11,16 @@ the files your desktop reads.
 [![AUR](https://img.shields.io/aur/version/riso?style=for-the-badge&labelColor=101418&color=b195e8)](https://aur.archlinux.org/packages/riso)
 [![License](https://img.shields.io/github/license/eldios/riso?style=for-the-badge&labelColor=101418&color=d8bd78)](LICENSE)
 
-**[<kbd> <br> Install <br> </kbd>](#install)**
-**[<kbd> <br> Quick start <br> </kbd>](#quick-start)**
-**[<kbd> <br> Commands <br> </kbd>](#commands)**
-**[<kbd> <br> How it works <br> </kbd>](#how-a-theme-is-put-together)**
-**[<kbd> <br> Themes <br> </kbd>](#themes)**
-**[<kbd> <br> Cleanup <br> </kbd>](#cleanup)**
-
 <img src="assets/screenshot.png" alt="one desktop, two themes: caio on the left, tuscany-sunset on the right" width="920" />
+
+<br><br>
+
+<a href="#install"><img src="assets/pills/install.svg" alt="Install" /></a>&nbsp;
+<a href="#quick-start"><img src="assets/pills/quickstart.svg" alt="Quick start" /></a>&nbsp;
+<a href="#commands"><img src="assets/pills/commands.svg" alt="Commands" /></a>&nbsp;
+<a href="#how-a-theme-is-put-together"><img src="assets/pills/how.svg" alt="How it works" /></a>&nbsp;
+<a href="#themes"><img src="assets/pills/themes.svg" alt="Themes" /></a>&nbsp;
+<a href="#cleanup"><img src="assets/pills/cleanup.svg" alt="Cleanup" /></a>
 
 </div>
 

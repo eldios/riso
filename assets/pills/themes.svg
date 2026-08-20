@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="81" height="38" role="img" aria-label="Themes">
+  <rect x="1" y="1" width="79" height="36" rx="18" fill="#101418" stroke="#d4707f" stroke-opacity="0.55" stroke-width="1.5"/>
+  <rect x="26" y="29" width="28" height="2.5" rx="1.25" fill="#d4707f"/>
+  <text x="40" y="21" text-anchor="middle" font-family="-apple-system,'Segoe UI',Ubuntu,Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3">Themes</text>
+</svg>
