@@ -39,3 +39,7 @@ fixtures omarchy_ref="v4.0.0":
 # Usage: just release 0.4.0 "changelog line" ["another line"...]
 release version +notes: && ci
     ./scripts/release.sh {{version}} {{notes}}
+
+# Sync the AUR package to the released version; run after the tag is pushed.
+aur:
+    ./scripts/aur-publish.sh
