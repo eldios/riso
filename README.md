@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot-caio.png" alt="the caio theme applied: btop, fastfetch and the wallpaper all in the same palette" width="920" />
+  <img src="assets/screenshot.png" alt="one desktop, two themes: caio on the left, tuscany-sunset on the right" width="920" />
 </p>
 
 ## Quick start
