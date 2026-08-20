@@ -1,58 +1,70 @@
-<p align="center">
-  <img src="assets/riso-logo.png" alt="riso" width="240" />
-</p>
+<div align="center">
+  <img src="assets/riso-logo.png" alt="riso" width="260" />
 
-<h1 align="center">riso</h1>
+### One palette, your whole desktop
 
-<p align="center">
-  A ricing framework for Linux desktops. Community-driven, and yours to extend.
-</p>
+A ricing framework for Linux: themes are data, riso renders them into
+the files your desktop reads.
 
-<p align="center">
-  <a href="https://github.com/eldios/riso/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/eldios/riso/ci.yml?branch=main&label=ci&style=flat-square" /></a>
-  <a href="https://github.com/eldios/riso/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/eldios/riso?style=flat-square" /></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/eldios/riso?style=flat-square" /></a>
-</p>
+[![CI](https://img.shields.io/github/actions/workflow/status/eldios/riso/ci.yml?branch=main&style=for-the-badge&label=ci&labelColor=101418&color=8ac79a)](https://github.com/eldios/riso/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/eldios/riso?style=for-the-badge&labelColor=101418&color=7ad4d8)](https://github.com/eldios/riso/releases/latest)
+[![AUR](https://img.shields.io/aur/version/riso?style=for-the-badge&labelColor=101418&color=b195e8)](https://aur.archlinux.org/packages/riso)
+[![License](https://img.shields.io/github/license/eldios/riso?style=for-the-badge&labelColor=101418&color=d8bd78)](LICENSE)
 
-<p align="center">
-  <a href="#quick-start">Quick start</a> &middot;
-  <a href="#commands">Commands</a> &middot;
-  <a href="#how-a-theme-is-put-together">How it works</a> &middot;
-  <a href="#extending">Extending</a>
-</p>
+**[<kbd> <br> Install <br> </kbd>](#install)**
+**[<kbd> <br> Quick start <br> </kbd>](#quick-start)**
+**[<kbd> <br> Commands <br> </kbd>](#commands)**
+**[<kbd> <br> How it works <br> </kbd>](#how-a-theme-is-put-together)**
+**[<kbd> <br> Themes <br> </kbd>](#themes)**
+**[<kbd> <br> Cleanup <br> </kbd>](#cleanup)**
 
-<p align="center">
-  <img src="assets/screenshot.png" alt="one desktop, two themes: caio on the left, tuscany-sunset on the right" width="920" />
-</p>
+<img src="assets/screenshot.png" alt="one desktop, two themes: caio on the left, tuscany-sunset on the right" width="920" />
 
-## Quick start
+</div>
+
+## Features
+
+- One palette renders seventeen applications out of the box: terminals,
+  bars, notifiers, lockers, editors
+- Full-screen carousel (`--gui`) and terminal picker with image
+  previews (`--tui`) for themes, wallpapers and the catalog
+- Themes are data, never code: executables, run directives, symlinks
+  and escaping paths are refused at install time
+- Your configs stay yours: riso renders fragments your configs include,
+  and `riso restore` puts back every byte it ever wrote over
+- Hyprland, Sway, niri and Omarchy recognized from the session; reads
+  Omarchy themes byte-for-byte compatibly
+- Wallpapers per theme, remembered per theme
+- One binary, a manpage, `git` and `curl` for fetching things
+
+## Install
+
+### Arch and the Arch family
+
+Omarchy, CachyOS, EndeavourOS, Manjaro, Garuda and every other
+derivative install from the AUR: [`riso`](https://aur.archlinux.org/packages/riso)
+builds from source and verifies the PGP-signed release tag,
+[`riso-bin`](https://aur.archlinux.org/packages/riso-bin) ships the
+prebuilt binary.
 
 ```bash
-cd packaging && makepkg -si      # Arch, see below for the other families
-riso theme install caio          # from the catalog
-riso theme set caio              # apply it, and tell the desktop
+paru -S riso
 ```
 
-<details>
-<summary>Debian, Ubuntu, Mint</summary>
+`yay` works the same. Without a helper, clone and build:
 
 ```bash
-cargo deb && sudo dpkg -i target/debian/riso_*.deb
+git clone https://aur.archlinux.org/riso.git
+cd riso && makepkg -si
 ```
 
-</details>
+> [!NOTE]
+> The source package verifies the release tag against the maintainer
+> key: `gpg --recv-keys AA6BC7743F8F9AD84BBA15C72CCBF4B71EFFDD46` once
+> before the first build.
 
 <details>
-<summary>Fedora, RHEL, openSUSE</summary>
-
-```bash
-cargo build --release && cargo generate-rpm && sudo rpm -i target/generate-rpm/*.rpm
-```
-
-</details>
-
-<details>
-<summary>NixOS</summary>
+<summary><strong>NixOS</strong></summary>
 
 Try it without installing anything:
 
@@ -66,30 +78,56 @@ home-manager configuration.
 
 </details>
 
-Runs on Arch and derivatives, Debian and its family, Fedora and the rpm world,
-and NixOS. One binary, a manpage, and `git` and `curl` for fetching things.
+<details>
+<summary><strong>Debian, Ubuntu, Mint</strong></summary>
 
-Themes come from anywhere, not only the catalog.
+Grab the `.deb` from the [latest release](https://github.com/eldios/riso/releases/latest)
+and `sudo dpkg -i` it.
+
+</details>
+
+<details>
+<summary><strong>Fedora, RHEL, openSUSE</strong></summary>
+
+Grab the `.rpm` from the [latest release](https://github.com/eldios/riso/releases/latest)
+and `sudo rpm -i` it.
+
+</details>
+
+<details>
+<summary><strong>From source, if you must</strong></summary>
 
 ```bash
-riso theme install <git-url>     # from anywhere
-riso theme install --gui         # or browse the catalog with previews
+git clone https://github.com/eldios/riso.git
+cd riso && cargo build --release
 ```
 
-<p align="center">
+The binary lands in `target/release/riso`; the manpage is
+`docs/riso.1`. On Arch, `cd packaging && makepkg -si` does the same
+through the package manager.
+
+</details>
+
+## Quick start
+
+```bash
+riso theme install caio
+riso theme set caio
+riso backgrounds next
+```
+
+Themes come from anywhere, not only the catalog, and previews come
+before choices:
+
+```bash
+riso theme install <git-url>
+riso theme install --gui
+riso theme set --tui
+```
+
+<div align="center">
   <img src="assets/screenshot-carousel.png" alt="riso theme set --gui: the carousel of theme previews" width="920" />
-</p>
-
-## Why a framework and not a folder of dotfiles
-
-A theme is data: a palette, some typography, optionally a wallpaper. Everything
-the desktop reads is generated from it, so adding support for an application
-does not go back and make every existing theme incomplete. And when an author
-wants to hand-tune one file, what the theme ships wins over what was generated.
-
-Fonts are tokens like colours, so a theme carries its own typography instead of
-leaving it to a setting somewhere else. The cat in the logo is caio, and so is
-the example theme.
+</div>
 
 ## Commands
 
@@ -109,13 +147,11 @@ the example theme.
 | `riso restore` | put back what riso wrote over |
 | `riso uninstall --yes` | put everything back and forget the state |
 
-Every component has a single-letter alias (`riso t s` is `riso theme set`,
-`backgrounds` also answers to `b`) and every command takes
-`-o human|json|yaml`, so scripts read structure instead of parsing prose.
-
-`riso(1)` has the options. The handful worth keeping live in
-`~/.config/riso/config.toml`, managed by `riso config`: the default output
-format, and `omarchy-themes` to keep Omarchy's own themes out of the list.
+Every component has a single-letter alias (`riso t s` is `riso theme
+set`, `backgrounds` also answers to `b`) and every command takes
+`-o human|json|yaml`, so scripts read structure instead of parsing
+prose. `riso(1)` has the options; the handful worth keeping live in
+`~/.config/riso/config.toml`, managed by `riso config`.
 
 ## How a theme is put together
 
@@ -126,43 +162,49 @@ Four layers decide any given file, strongest first:
 3. a template directory the desktop provides
 4. the templates compiled into `riso`
 
-Layer 4 is what makes a theme impossible to leave incomplete; layer 1 is what
-lets an author overrule the generator on the file they care about.
+Layer 4 is what makes a theme impossible to leave incomplete; layer 1
+is what lets an author overrule the generator on the file they care
+about. Fonts are tokens like colours, so a theme carries its own
+typography instead of leaving it to a setting somewhere else.
 
 ### Your configuration stays yours
 
 `riso` renders fragments into its own tree and never rewrites an
-application's config file. Your config, which belongs to you, includes the
-fragment: mako's `include=`, waybar's `@import`, hyprlock's `source`, a
-terminal's import directive. A theme change rewrites the fragment; every rule
-you wrote around the include survives it, and your own overrides can be
-included after the fragment so they win.
+application's config file. Your config, which belongs to you, includes
+the fragment: mako's `include=`, waybar's `@import`, hyprlock's
+`source`, a terminal's import directive. A theme change rewrites the
+fragment; every rule you wrote around the include survives it, and
+your own overrides can be included after the fragment so they win.
 
 The one exception is a plugin, whose whole point is reaching a path the
-application dictates. What was there first is copied aside for `riso restore`,
-byte for byte, and the file opens with a comment saying it is generated and
-where edits belong, in whatever comment syntax the format speaks. A format
-with no comments, JSON above all, gets none.
-
-### Desktops
-
-`riso` writes the files and then tells the desktop, in whatever way that
-desktop expects: Hyprland, Sway, niri, and Omarchy are recognized from the
-session. A desktop it does not know still gets its files written, which is all
-some of them need.
+application dictates. What was there first is copied aside for
+`riso restore`, byte for byte, and the file opens with a comment saying
+it is generated and where edits belong, in whatever comment syntax the
+format speaks. A format with no comments, JSON above all, gets none.
 
 ### Safety
 
-A theme is data and `riso` enforces it. Executable files, directives that name
-a program to run, symlinks, and paths that climb out of the theme directory are
-all refused, on the client as well as in the catalog. A theme that arrives from
-a git URL never passed through a catalog at all, which is exactly why the check
-runs twice.
+A theme is data and `riso` enforces it. Executable files, directives
+that name a program to run, symlinks, and paths that climb out of the
+theme directory are all refused, on the client as well as in the
+catalog. A theme that arrives from a git URL never passed through a
+catalog at all, which is exactly why the check runs twice.
+
+## Themes
+
+The [catalog](https://github.com/eldios/riso-themes) is a static index
+pointing at ordinary git repositories, so publishing a theme needs no
+account anywhere and installing one is a clone with a checksum.
+
+| | |
+| :---: | :---: |
+| [![caio](https://raw.githubusercontent.com/eldios/riso-theme-caio/main/preview.png)](https://github.com/eldios/riso-theme-caio) | [![tuscany-sunset](https://raw.githubusercontent.com/eldios/riso-theme-tuscany-sunset/main/preview.png)](https://github.com/eldios/riso-theme-tuscany-sunset) |
+| [`caio`](https://github.com/eldios/riso-theme-caio) | [`tuscany-sunset`](https://github.com/eldios/riso-theme-tuscany-sunset) |
 
 ## Extending
 
-A plugin teaches `riso` to theme an application it does not know about: a
-directory with a manifest and its templates, installed from git.
+A plugin teaches `riso` to theme an application it does not know about:
+a directory with a manifest and its templates, installed from git.
 
 ```toml
 id = "eldios.zed"
@@ -174,17 +216,11 @@ template = "zed.json.tpl"
 target = "~/.config/zed/themes/riso.json"
 ```
 
-Themes and plugins are ordinary git repositories. The catalog is a static index
-that points at them, so publishing one needs no account anywhere and installing
-one is a clone with a checksum.
-
-## Omarchy compatibility
-
-`riso` also reads themes written for [Omarchy](https://github.com/basecamp/omarchy),
-and renders them identically: the conformance suite resolves every palette that
-project publishes byte for byte against its pipeline, and renders its templates
-to the same bytes. A theme written for either works on both. See
-[NOTICE](NOTICE).
+`riso` also reads themes written for
+[Omarchy](https://github.com/basecamp/omarchy) and renders them
+identically: the conformance suite resolves every palette that project
+publishes byte for byte against its pipeline. A theme written for
+either works on both. See [NOTICE](NOTICE).
 
 ## Develop
 
@@ -193,3 +229,16 @@ nix develop        # toolchain plus every tool the gates need
 just ci            # format, lint, tests
 just conformance   # the interoperability check
 ```
+
+## Cleanup
+
+Leaving is as safe as arriving. Put back every file `riso` wrote over,
+or put everything back and forget the generated state too:
+
+```bash
+riso restore
+riso uninstall --yes
+```
+
+Then remove the package with whatever installed it: `paru -Rns riso`,
+`apt remove riso`, `dnf remove riso`, or drop the flake input.
