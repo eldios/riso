@@ -41,6 +41,19 @@ the files your desktop reads.
 
 ## Install
 
+### Prerequisites
+
+- A desktop riso can tell about the change: the Hyprland, Sway or niri
+  compositors, or Omarchy, where riso is a drop-in. Anywhere else the
+  files are still written, but nothing reloads and nothing reads them
+  until you wire it.
+- `git` and `curl` on the PATH: themes install and update through them.
+- `quickshell`, only for the `--gui` carousel; `--tui` works in any
+  terminal.
+- Each application reads its theme through one include line in its own
+  config. Run `riso config check` after installing: it lists what is
+  missing and the exact line each application needs.
+
 <details>
 <summary><strong>Arch and the Arch family</strong></summary>
 
@@ -52,12 +65,11 @@ prebuilt binary. Each member has its own front door:
 
 | Distro | Install | Worth knowing |
 | --- | --- | --- |
-| Arch | `paru -S riso` | any AUR helper works, `yay` included |
-| Omarchy | `omarchy pkg add riso` | or the menu, Install > AUR; updates go through `omarchy update`, AUR packages included |
-| EndeavourOS | `yay -S riso` | `yay` comes preinstalled |
-| CachyOS | `paru -S riso` | `paru` comes preinstalled |
-| Garuda | `paru -S riso` | update with `garuda-update --aur` |
+| Arch and derivatives (EndeavourOS, CachyOS, Garuda, ...) | `paru -S riso` | [*] |
+| Omarchy | `omarchy pkg aur add riso` | `riso-bin` for the prebuilt binary; or the menu, Install > AUR; updates go through `omarchy update` |
 | Manjaro | `pamac build riso` | enable AUR in pamac's preferences first; Manjaro's repos lag Arch and its team does not support the AUR |
+
+[*] any AUR helper works the same, `yay` included.
 
 Without a helper, clone and build:
 
