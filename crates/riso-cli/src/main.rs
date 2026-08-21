@@ -103,6 +103,10 @@ enum ConfigAction {
         /// Where the generated theme lives
         #[arg(long, value_name = "DIR")]
         state: Option<PathBuf>,
+        /// Check as this desktop instead of detecting one:
+        /// omarchy, hyprland, sway, niri, none
+        #[arg(long)]
+        desktop: Option<String>,
     },
     /// Print one option's value
     #[command(visible_alias = "g")]
@@ -998,9 +1002,20 @@ fn run_config(action: Option<ConfigAction>, output: OutputFormat) -> Result<(), 
     use riso_core::config::Config;
 
     match action.unwrap_or(ConfigAction::List) {
-        ConfigAction::Check { state } => {
+        ConfigAction::Check { state, desktop } => {
             let state_dir = state_or_default(state)?;
-            let checks = check::run(&state_dir, &catalog::default_theme_dirs(), DEFAULT_CATALOG);
+            let desktop = match desktop {
+                Some(name) => Some(
+                    Desktop::from_name(&name).ok_or_else(|| format!("unknown desktop '{name}'"))?,
+                ),
+                None => None,
+            };
+            let checks = check::run(
+                &state_dir,
+                &catalog::default_theme_dirs(),
+                DEFAULT_CATALOG,
+                desktop,
+            );
             if !emit(output, &checks)? {
                 check::print(&checks);
             }

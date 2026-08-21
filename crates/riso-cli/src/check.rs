@@ -140,7 +140,12 @@ fn includes_riso(config: &Path) -> bool {
         .unwrap_or(false)
 }
 
-pub fn run(state_dir: &Path, theme_dirs: &[PathBuf], catalog_url: &str) -> Vec<Check> {
+pub fn run(
+    state_dir: &Path,
+    theme_dirs: &[PathBuf],
+    catalog_url: &str,
+    desktop: Option<Desktop>,
+) -> Vec<Check> {
     let mut checks = Vec::new();
 
     checks.push(tool(
@@ -162,18 +167,24 @@ pub fn run(state_dir: &Path, theme_dirs: &[PathBuf], catalog_url: &str) -> Vec<C
         "please install quickshell for the full-screen carousel, or use --tui",
     ));
 
-    let desktop = Desktop::detect();
+    let (desktop, how) = match desktop {
+        Some(named) => (named, "named with --desktop"),
+        None => (Desktop::detect(), "recognized from this session"),
+    };
     checks.push(Check {
         name: "desktop".to_owned(),
         required: false,
         ok: desktop != Desktop::None,
         detail: if desktop == Desktop::None {
-            "none recognized from this session".to_owned()
+            format!("none {how}")
         } else {
-            desktop.name().to_owned()
+            format!("{} ({how})", desktop.name())
         },
         hint: if desktop == Desktop::None {
-            "riso still writes its files; pass --desktop to name one and be reloaded".to_owned()
+            "themes still render, but no desktop is told to reload; \
+             rerun with --desktop <name> to check as one of omarchy, \
+             hyprland, sway or niri"
+                .to_owned()
         } else {
             String::new()
         },
