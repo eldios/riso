@@ -111,7 +111,7 @@ Manage plugins, which teach
 .B riso
 to theme applications it does not know about.
 .TP
-.B "config [list|get|set|apps|check [name]]"
+.B "config [list|get|set|apps|check [name]|wire [app...]]"
 Read and change the few options kept in
 .IR ~/.config/riso/config.toml :
 .B output
@@ -135,6 +135,15 @@ one. Every line answers alone by its name, tool, section or
 application alike, applications even when not installed; a named
 check's exit status reflects that check, the full run fails only on a
 missing required tool.
+.B config wire
+adds the missing include lines itself, cautiously: the plan is shown
+first, each file asks its own confirmation (or
+.B \-\-yes
+for scripts), every touched file is captured so
+.B riso restore
+puts it back byte for byte, and riso keeps its hands off symlinked
+configs, files where an automatic edit could clash, and lua Hyprland
+setups, showing the line to place by hand instead.
 .B config apps
 lists everything the current configuration can theme and where each
 piece comes from, resolved the way a render resolves it: the applied

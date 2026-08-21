@@ -55,7 +55,9 @@ the files your desktop reads.
   terminal.
 - Each application reads its theme through one include line in its own
   config. Run `riso config check` after installing: it lists what is
-  missing and the exact line each application needs.
+  missing and the exact line each application needs; `riso config wire`
+  adds those lines for you, one confirmation per file, and
+  `riso restore` puts every touched file back.
 
 <details>
 <summary><strong>Arch and the Arch family</strong></summary>
@@ -171,6 +173,7 @@ riso theme set --tui
 | `riso config` | the few persistent options |
 | `riso config check [name]` | can this system carry riso, whole or one check by name |
 | `riso config apps` | what the current configuration can theme, and from where |
+| `riso config wire [app...]` | add the missing include lines, cautiously; `riso restore` undoes |
 | `riso restore` | put back what riso wrote over |
 | `riso uninstall --yes` | put everything back and forget the state |
 

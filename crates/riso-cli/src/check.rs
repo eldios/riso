@@ -23,22 +23,34 @@ pub struct Check {
 
 /// An application riso renders for, and the line its config needs to
 /// carry so the rendered fragment is actually read.
-struct Wiring {
-    app: &'static str,
-    binary: &'static str,
-    config: &'static str,
-    fragment: &'static str,
-    include: &'static str,
+pub(crate) struct Wiring {
+    pub(crate) app: &'static str,
+    pub(crate) binary: &'static str,
+    pub(crate) config: &'static str,
+    pub(crate) fragment: &'static str,
+    pub(crate) include: &'static str,
+    /// Where the line must land: CSS @import and mako's include only
+    /// mean what they should at the top of the file.
+    pub(crate) prepend: bool,
+    /// A token whose presence makes automatic editing unsafe (duplicate
+    /// TOML/ini sections break parsers, duplicated keys are ambiguous):
+    /// the wire command falls back to showing the line instead.
+    pub(crate) conflict: Option<&'static str>,
+    /// Comment syntax for the marker line, prefix and suffix.
+    pub(crate) comment: (&'static str, &'static str),
 }
 
 /// `{}` marks where the fragment's absolute path lands.
-const WIRINGS: &[Wiring] = &[
+pub(crate) const WIRINGS: &[Wiring] = &[
     Wiring {
         app: "alacritty",
         binary: "alacritty",
         config: "alacritty/alacritty.toml",
         fragment: "alacritty.toml",
         include: "[general]\nimport = [\"{}\"]",
+        prepend: false,
+        conflict: Some("[general]"),
+        comment: ("# ", ""),
     },
     Wiring {
         app: "kitty",
@@ -46,6 +58,9 @@ const WIRINGS: &[Wiring] = &[
         config: "kitty/kitty.conf",
         fragment: "kitty.conf",
         include: "include {}",
+        prepend: false,
+        conflict: None,
+        comment: ("# ", ""),
     },
     Wiring {
         app: "ghostty",
@@ -53,6 +68,9 @@ const WIRINGS: &[Wiring] = &[
         config: "ghostty/config",
         fragment: "ghostty.conf",
         include: "config-file = {}",
+        prepend: false,
+        conflict: None,
+        comment: ("# ", ""),
     },
     Wiring {
         app: "foot",
@@ -60,6 +78,9 @@ const WIRINGS: &[Wiring] = &[
         config: "foot/foot.ini",
         fragment: "foot.ini",
         include: "[main]\ninclude={}",
+        prepend: false,
+        conflict: Some("[main]"),
+        comment: ("# ", ""),
     },
     Wiring {
         app: "mako",
@@ -67,6 +88,9 @@ const WIRINGS: &[Wiring] = &[
         config: "mako/config",
         fragment: "mako.ini",
         include: "include={}",
+        prepend: true,
+        conflict: None,
+        comment: ("# ", ""),
     },
     Wiring {
         app: "waybar",
@@ -74,6 +98,9 @@ const WIRINGS: &[Wiring] = &[
         config: "waybar/style.css",
         fragment: "waybar.css",
         include: "@import \"{}\";",
+        prepend: true,
+        conflict: None,
+        comment: ("/* ", " */"),
     },
     Wiring {
         app: "hyprland",
@@ -81,6 +108,9 @@ const WIRINGS: &[Wiring] = &[
         config: "hypr/hyprland.conf",
         fragment: "hyprland.conf",
         include: "source = {}",
+        prepend: false,
+        conflict: None,
+        comment: ("# ", ""),
     },
     Wiring {
         app: "hyprlock",
@@ -88,6 +118,9 @@ const WIRINGS: &[Wiring] = &[
         config: "hypr/hyprlock.conf",
         fragment: "hyprlock.conf",
         include: "source = {}",
+        prepend: false,
+        conflict: None,
+        comment: ("# ", ""),
     },
     Wiring {
         app: "btop",
@@ -95,17 +128,20 @@ const WIRINGS: &[Wiring] = &[
         config: "btop/btop.conf",
         fragment: "btop.theme",
         include: "color_theme = \"{}\"",
+        prepend: false,
+        conflict: Some("color_theme"),
+        comment: ("# ", ""),
     },
 ];
 
-fn on_path(binary: &str) -> Option<PathBuf> {
+pub(crate) fn on_path(binary: &str) -> Option<PathBuf> {
     let paths = std::env::var_os("PATH")?;
     std::env::split_paths(&paths)
         .map(|dir| dir.join(binary))
         .find(|candidate| candidate.is_file())
 }
 
-fn config_home() -> PathBuf {
+pub(crate) fn config_home() -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
@@ -137,7 +173,7 @@ fn tool(name: &str, required: bool, purpose: &str, remedy: &str) -> Check {
 
 /// Whether `config` already reads riso's tree, by the one thing every
 /// include spelling shares: the path it points at.
-fn includes_riso(config: &Path) -> bool {
+pub(crate) fn includes_riso(config: &Path) -> bool {
     std::fs::read_to_string(config)
         .map(|text| text.contains("/riso/"))
         .unwrap_or(false)
@@ -158,6 +194,7 @@ pub fn select(
         "git" => git_check(),
         "curl" => curl_check(),
         "quickshell" => quickshell_check(),
+        "distro" => distro_check(),
         "desktop" => desktop_check(desktop),
         "themes" => themes_check(theme_dirs),
         "rendered" => rendered_check(&current),
@@ -190,6 +227,7 @@ pub fn select(
                 "git",
                 "curl",
                 "quickshell",
+                "distro",
                 "desktop",
                 "themes",
                 "rendered",
@@ -237,6 +275,31 @@ fn quickshell_check() -> Check {
         "only --gui needs it; --tui works in any terminal",
         "please install quickshell for the full-screen carousel, or use --tui",
     )
+}
+
+fn distro_check() -> Check {
+    let pretty = std::fs::read_to_string("/etc/os-release")
+        .ok()
+        .and_then(|s| {
+            s.lines().find(|l| l.starts_with("PRETTY_NAME=")).map(|l| {
+                l.trim_start_matches("PRETTY_NAME=")
+                    .trim_matches('"')
+                    .to_owned()
+            })
+        });
+    let declarative = crate::wire::declarative_system();
+    Check {
+        section: "environment".to_owned(),
+        name: "distro".to_owned(),
+        required: false,
+        ok: pretty.is_some(),
+        detail: pretty.unwrap_or_else(|| "unknown (no /etc/os-release)".to_owned()),
+        hint: if declarative {
+            "declarative system: config wire will only show lines, never edit".to_owned()
+        } else {
+            String::new()
+        },
+    }
 }
 
 fn desktop_check(desktop: Option<Desktop>) -> Check {
@@ -329,6 +392,7 @@ pub fn run(
         git_check(),
         curl_check(),
         quickshell_check(),
+        distro_check(),
         desktop_check(desktop),
         themes_check(theme_dirs),
         rendered_check(&current),

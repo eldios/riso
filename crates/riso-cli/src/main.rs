@@ -9,6 +9,7 @@ mod data;
 mod gui;
 mod output;
 mod tui;
+mod wire;
 
 use output::{emit, OutputFormat};
 
@@ -108,6 +109,19 @@ enum ConfigAction {
         /// Template directory; repeat for more, earlier ones take precedence
         #[arg(long = "templates", value_name = "DIR")]
         template_dirs: Vec<PathBuf>,
+    },
+    /// Add the include lines config check reports missing, cautiously:
+    /// plan shown first, one confirmation per file, riso restore undoes
+    #[command(visible_alias = "w")]
+    Wire {
+        /// Applications to wire; omit to plan every installed one
+        apps: Vec<String>,
+        /// Apply without asking, for scripts
+        #[arg(long)]
+        yes: bool,
+        /// Where the generated theme lives
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
     },
     /// Can this system carry riso: tools, desktop, and include wiring
     #[command(visible_alias = "k")]
@@ -1017,6 +1031,54 @@ fn run_config(action: Option<ConfigAction>, output: OutputFormat) -> Result<(), 
     use riso_core::config::Config;
 
     match action.unwrap_or(ConfigAction::List) {
+        ConfigAction::Wire { apps, yes, state } => {
+            let state_dir = state_or_default(state)?;
+            let plans = wire::plan(&state_dir, &apps, wire::declarative_system())?;
+            if emit(output, &plans)? && !yes {
+                return Ok(());
+            }
+
+            let mut store: Option<riso_core::snapshot::Store> = None;
+            let (mut wired, mut skipped) = (0, 0);
+            for plan in &plans {
+                if output == OutputFormat::Human {
+                    println!("{}", wire::describe(plan));
+                    if matches!(
+                        plan.action,
+                        wire::Action::Manual | wire::Action::Declarative
+                    ) {
+                        for line in plan.text.lines() {
+                            println!("    {line}");
+                        }
+                    }
+                }
+                if !wire::actionable(plan) {
+                    continue;
+                }
+                let go = yes
+                    || (output == OutputFormat::Human
+                        && wire::confirm(&format!("  wire {}?", plan.app)));
+                if !go {
+                    skipped += 1;
+                    continue;
+                }
+                if store.is_none() {
+                    store = Some(
+                        riso_core::snapshot::Store::open(&state_dir.join("ownership"))
+                            .map_err(|e| e.to_string())?,
+                    );
+                }
+                wire::apply(plan, store.as_mut().expect("opened above"))?;
+                wired += 1;
+                if output == OutputFormat::Human {
+                    println!("  wired.");
+                }
+            }
+            if output == OutputFormat::Human {
+                println!("{wired} wired, {skipped} left as they were; riso restore undoes it");
+            }
+            Ok(())
+        }
         ConfigAction::Apps {
             state,
             template_dirs,
