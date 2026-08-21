@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.6.1
+Version:        0.6.2
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,11 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Sat Aug 22 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.6.2-1
+- The guarded dofile wiring line reads as two short lines in check hints.
+- plugin remove accepts the id plugin list prints.
+- RISO_DECLARATIVE overrides the declarative-system probe on immutable distros.
+
 * Sat Aug 22 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.6.1-1
 - Hyprland lua configs get themed: riso renders a hyprland.lua fragment from the palette and config wire adds a guarded dofile line for it. config apps lists both hyprland spellings honestly, and the wire summary counts untouched plans.
 
