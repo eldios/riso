@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,11 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Fri Aug 21 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.6.0-1
+- config wire adds the missing include lines, cautiously: plan, confirm, riso restore undoes
+- declarative systems are never edited: wire shows the lines to carry into the configuration
+- config check reports the distro and tells lua hyprland setups the truth
+
 * Fri Aug 21 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.5.0-1
 - config check answers by name for tools, sections and applications, with sections and the skipped list in the output
 - on Omarchy the wiring rows collapse into one: the desktop's own configs read the theme
