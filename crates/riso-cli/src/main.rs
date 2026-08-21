@@ -100,6 +100,9 @@ enum ConfigAction {
     /// Can this system carry riso: tools, desktop, and include wiring
     #[command(visible_alias = "k")]
     Check {
+        /// One check by name: a tool, a section, or an application
+        /// (shown even when not installed); omit it for the whole system
+        name: Option<String>,
         /// Where the generated theme lives
         #[arg(long, value_name = "DIR")]
         state: Option<PathBuf>,
@@ -1002,14 +1005,35 @@ fn run_config(action: Option<ConfigAction>, output: OutputFormat) -> Result<(), 
     use riso_core::config::Config;
 
     match action.unwrap_or(ConfigAction::List) {
-        ConfigAction::Check { state, desktop } => {
+        ConfigAction::Check {
+            name,
+            state,
+            desktop,
+        } => {
             let state_dir = state_or_default(state)?;
             let desktop = match desktop {
-                Some(name) => Some(
-                    Desktop::from_name(&name).ok_or_else(|| format!("unknown desktop '{name}'"))?,
+                Some(named) => Some(
+                    Desktop::from_name(&named)
+                        .ok_or_else(|| format!("unknown desktop '{named}'"))?,
                 ),
                 None => None,
             };
+            if let Some(name) = name {
+                let checks = check::select(
+                    &name,
+                    &state_dir,
+                    &catalog::default_theme_dirs(),
+                    DEFAULT_CATALOG,
+                    desktop,
+                )?;
+                if !emit(output, &checks)? {
+                    check::print(&checks);
+                }
+                if checks.iter().any(|c| !c.ok) {
+                    std::process::exit(1);
+                }
+                return Ok(());
+            }
             let checks = check::run(
                 &state_dir,
                 &catalog::default_theme_dirs(),

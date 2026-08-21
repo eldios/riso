@@ -111,7 +111,7 @@ Manage plugins, which teach
 .B riso
 to theme applications it does not know about.
 .TP
-.B "config [list|get|set|check]"
+.B "config [list|get|set|check [name]]"
 Read and change the few options kept in
 .IR ~/.config/riso/config.toml :
 .B output
@@ -131,7 +131,10 @@ reads the rendered fragment, printing the exact include line when it
 does not. With
 .B \-\-desktop
 the check evaluates the system as that desktop instead of detecting
-one. The exit status is nonzero only when a required tool is missing.
+one. Every line answers alone by its name, tool, section or
+application alike, applications even when not installed; a named
+check's exit status reflects that check, the full run fails only on a
+missing required tool.
 .TP
 .B "dev palette|render"
 Tools for theme authors: print a theme's palette as resolved key and value

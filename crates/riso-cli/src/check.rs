@@ -12,6 +12,7 @@ use riso_core::desktop::Desktop;
 
 #[derive(Debug, Serialize)]
 pub struct Check {
+    pub section: String,
     pub name: String,
     pub required: bool,
     pub ok: bool,
@@ -116,6 +117,7 @@ fn config_home() -> PathBuf {
 fn tool(name: &str, required: bool, purpose: &str, remedy: &str) -> Check {
     match on_path(name) {
         Some(path) => Check {
+            section: "tools".to_owned(),
             name: name.to_owned(),
             required,
             ok: true,
@@ -123,6 +125,7 @@ fn tool(name: &str, required: bool, purpose: &str, remedy: &str) -> Check {
             hint: String::new(),
         },
         None => Check {
+            section: "tools".to_owned(),
             name: name.to_owned(),
             required,
             ok: false,
@@ -140,38 +143,109 @@ fn includes_riso(config: &Path) -> bool {
         .unwrap_or(false)
 }
 
-pub fn run(
+/// One check, picked by name: a tool, a section, or an application,
+/// shown whether or not the application is installed, because asking by
+/// name means wanting the answer anyway.
+pub fn select(
+    name: &str,
     state_dir: &Path,
     theme_dirs: &[PathBuf],
     catalog_url: &str,
     desktop: Option<Desktop>,
-) -> Vec<Check> {
-    let mut checks = Vec::new();
+) -> Result<Vec<Check>, String> {
+    let current = state_dir.join("current/theme");
+    let found = match name {
+        "git" => git_check(),
+        "curl" => curl_check(),
+        "quickshell" => quickshell_check(),
+        "desktop" => desktop_check(desktop),
+        "themes" => themes_check(theme_dirs),
+        "rendered" => rendered_check(&current),
+        "catalog" => catalog_check(catalog_url),
+        app => {
+            if let Some(wiring) = WIRINGS.iter().find(|w| w.app == app) {
+                let mut check = wire(wiring, &current);
+                if on_path(wiring.binary).is_none() {
+                    check.detail = format!("{} not found on PATH; {}", wiring.binary, check.detail);
+                }
+                return Ok(vec![check]);
+            }
+            if let Some(template) = riso_core::builtin::TEMPLATES
+                .iter()
+                .find(|t| t.name.split('.').next() == Some(app))
+            {
+                let fragment = current.join(template.name);
+                return Ok(vec![Check {
+                    section: "applications".to_owned(),
+                    name: app.to_owned(),
+                    required: false,
+                    ok: true,
+                    detail: format!("rendered as {}", fragment.display()),
+                    hint: "no single include line for this application: \
+                           point it at the file above by hand"
+                        .to_owned(),
+                }]);
+            }
+            let mut known = vec![
+                "git",
+                "curl",
+                "quickshell",
+                "desktop",
+                "themes",
+                "rendered",
+                "catalog",
+            ];
+            known.extend(WIRINGS.iter().map(|w| w.app));
+            known.extend(
+                riso_core::builtin::TEMPLATES
+                    .iter()
+                    .filter_map(|t| t.name.split('.').next()),
+            );
+            known.sort_unstable();
+            known.dedup();
+            return Err(format!(
+                "unknown check '{app}'; pick one of: {}",
+                known.join(", ")
+            ));
+        }
+    };
+    Ok(vec![found])
+}
 
-    checks.push(tool(
+fn git_check() -> Check {
+    tool(
         "git",
         true,
         "themes install and update through it",
         "please install git with your package manager",
-    ));
-    checks.push(tool(
+    )
+}
+
+fn curl_check() -> Check {
+    tool(
         "curl",
         true,
         "the catalog and previews are fetched with it",
         "please install curl with your package manager",
-    ));
-    checks.push(tool(
+    )
+}
+
+fn quickshell_check() -> Check {
+    tool(
         "quickshell",
         false,
         "only --gui needs it; --tui works in any terminal",
         "please install quickshell for the full-screen carousel, or use --tui",
-    ));
+    )
+}
 
+fn desktop_check(desktop: Option<Desktop>) -> Check {
     let (desktop, how) = match desktop {
         Some(named) => (named, "named with --desktop"),
         None => (Desktop::detect(), "recognized from this session"),
     };
-    checks.push(Check {
+    Check {
+        section: "environment".to_owned(),
         name: "desktop".to_owned(),
         required: false,
         ok: desktop != Desktop::None,
@@ -188,10 +262,13 @@ pub fn run(
         } else {
             String::new()
         },
-    });
+    }
+}
 
+fn themes_check(theme_dirs: &[PathBuf]) -> Check {
     let themes = riso_core::catalog::installed(theme_dirs, None);
-    checks.push(Check {
+    Check {
+        section: "environment".to_owned(),
         name: "themes".to_owned(),
         required: false,
         ok: !themes.is_empty(),
@@ -201,74 +278,131 @@ pub fn run(
         } else {
             String::new()
         },
-    });
+    }
+}
 
-    let current = state_dir.join("current/theme");
-    checks.push(Check {
-        name: "rendered theme".to_owned(),
+fn rendered_check(current: &Path) -> Check {
+    let ok = current.join("colors.toml").is_file();
+    Check {
+        section: "environment".to_owned(),
+        name: "rendered".to_owned(),
         required: false,
-        ok: current.join("colors.toml").is_file(),
+        ok,
         detail: current.display().to_string(),
-        hint: if current.join("colors.toml").is_file() {
+        hint: if ok {
             String::new()
         } else {
             "nothing applied yet: riso theme set <name>".to_owned()
         },
-    });
+    }
+}
 
-    let catalog_ok = std::process::Command::new("curl")
+fn catalog_check(catalog_url: &str) -> Check {
+    let ok = std::process::Command::new("curl")
         .args(["-fsI", "--max-time", "10", catalog_url])
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
-    checks.push(Check {
+    Check {
+        section: "environment".to_owned(),
         name: "catalog".to_owned(),
         required: false,
-        ok: catalog_ok,
+        ok,
         detail: catalog_url.to_owned(),
-        hint: if catalog_ok {
+        hint: if ok {
             String::new()
         } else {
             "not reachable; installs from the catalog need the network".to_owned()
         },
-    });
+    }
+}
 
-    let config_home = config_home();
-    for wiring in WIRINGS {
-        let Some(_) = on_path(wiring.binary) else {
-            continue;
-        };
-        let config = config_home.join(wiring.config);
-        let fragment = current.join(wiring.fragment);
-        let line = wiring
-            .include
-            .replace("{}", &fragment.display().to_string());
+pub fn run(
+    state_dir: &Path,
+    theme_dirs: &[PathBuf],
+    catalog_url: &str,
+    desktop: Option<Desktop>,
+) -> Vec<Check> {
+    let current = state_dir.join("current/theme");
+    let resolved = desktop.unwrap_or_else(Desktop::detect);
+    let mut checks = vec![
+        git_check(),
+        curl_check(),
+        quickshell_check(),
+        desktop_check(desktop),
+        themes_check(theme_dirs),
+        rendered_check(&current),
+        catalog_check(catalog_url),
+    ];
 
-        let (ok, detail, hint) = if !config.is_file() {
-            (
-                false,
-                format!("installed, but {} does not exist", config.display()),
-                format!("please create it and add:\n    {line}"),
-            )
-        } else if includes_riso(&config) {
-            (true, config.display().to_string(), String::new())
-        } else {
-            (
-                false,
-                format!("{} does not read riso's fragment", config.display()),
-                format!("please add to it:\n    {line}"),
-            )
-        };
+    // On Omarchy the desktop's own configuration chain reads the rendered
+    // theme; per-application includes are its business, not the user's.
+    if resolved == Desktop::Omarchy {
         checks.push(Check {
-            name: wiring.app.to_owned(),
+            section: "applications".to_owned(),
+            name: "wiring".to_owned(),
             required: false,
-            ok,
-            detail,
-            hint,
+            ok: true,
+            detail: "handled by omarchy: its configs read the rendered theme".to_owned(),
+            hint: String::new(),
         });
+        return checks;
     }
 
+    let mut skipped = Vec::new();
+    for wiring in WIRINGS {
+        if on_path(wiring.binary).is_none() {
+            skipped.push(wiring.app);
+            continue;
+        }
+        checks.push(wire(wiring, &current));
+    }
+    if !skipped.is_empty() {
+        checks.push(Check {
+            section: "applications".to_owned(),
+            name: "not installed".to_owned(),
+            required: false,
+            ok: true,
+            detail: format!("skipped: {}", skipped.join(", ")),
+            hint: "name one to see its wiring anyway: riso config check foot".to_owned(),
+        });
+    }
     checks
+}
+
+/// One application's wiring verdict: config present, fragment included,
+/// and the exact line to add when it is not.
+fn wire(wiring: &Wiring, current: &Path) -> Check {
+    let config = config_home().join(wiring.config);
+    let fragment = current.join(wiring.fragment);
+    let line = wiring
+        .include
+        .replace("{}", &fragment.display().to_string())
+        .replace('\n', "\n    ");
+
+    let (ok, detail, hint) = if !config.is_file() {
+        (
+            false,
+            format!("{} does not exist", config.display()),
+            format!("please create it and add:\n    {line}"),
+        )
+    } else if includes_riso(&config) {
+        (true, config.display().to_string(), String::new())
+    } else {
+        (
+            false,
+            format!("{} does not read riso's fragment", config.display()),
+            format!("please add to it:\n    {line}"),
+        )
+    };
+    Check {
+        section: "applications".to_owned(),
+        name: wiring.app.to_owned(),
+        required: false,
+        ok,
+        detail,
+        hint,
+    }
 }
 
 /// The human rendering: a bold green V or red X per line, hints indented
@@ -282,7 +416,15 @@ pub fn print(checks: &[Check]) {
     };
     let dim = if color { "\x1b[2m" } else { "" };
 
+    let mut section = "";
     for check in checks {
+        if check.section != section {
+            if !section.is_empty() {
+                println!();
+            }
+            println!("{dim}{}:{reset}", check.section);
+            section = &check.section;
+        }
         let mark = if check.ok { good } else { bad };
         println!("{mark} {:<16} {}", check.name, check.detail);
         if !check.hint.is_empty() {
