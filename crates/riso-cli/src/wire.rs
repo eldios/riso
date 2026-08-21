@@ -268,7 +268,7 @@ mod tests {
         });
         assert_eq!(plan.action, Action::Append);
         assert!(plan.config.ends_with("hypr/hyprland.lua"));
-        assert!(plan.text.contains("pcall(dofile, \"/s/hyprland.lua\")"));
+        assert!(plan.text.contains("pcall(dofile, \"/s/hyprland.lua\")\nif err then print(err) end"));
         assert!(plan.text.starts_with("-- "));
     }
 

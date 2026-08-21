@@ -142,7 +142,7 @@ pub(crate) static HYPRLAND_LUA: Wiring = Wiring {
     binary: "Hyprland",
     config: "hypr/hyprland.lua",
     fragment: "hyprland.lua",
-    include: "local ok, err = pcall(dofile, \"{}\"); if err then print(err) end",
+    include: "local ok, err = pcall(dofile, \"{}\")\nif err then print(err) end",
     prepend: false,
     conflict: None,
     comment: ("-- ", ""),
