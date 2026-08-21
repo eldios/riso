@@ -68,6 +68,10 @@ pub const TEMPLATES: &[Builtin] = &[
         source: include_str!("../templates/helix.toml.tpl"),
     },
     Builtin {
+        name: "hyprland.lua",
+        source: include_str!("../templates/hyprland.lua.tpl"),
+    },
+    Builtin {
         name: "hyprlock.conf",
         source: include_str!("../templates/hyprlock.conf.tpl"),
     },

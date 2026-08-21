@@ -134,6 +134,28 @@ pub(crate) const WIRINGS: &[Wiring] = &[
     },
 ];
 
+/// Hyprland 0.55+ loads hyprland.lua over hyprland.conf when it exists,
+/// and lua cannot source hyprlang: the wiring shifts to the lua fragment,
+/// guarded so a missing fragment never aborts the whole config.
+pub(crate) static HYPRLAND_LUA: Wiring = Wiring {
+    app: "hyprland",
+    binary: "Hyprland",
+    config: "hypr/hyprland.lua",
+    fragment: "hyprland.lua",
+    include: "local ok, err = pcall(dofile, \"{}\"); if err then print(err) end",
+    prepend: false,
+    conflict: None,
+    comment: ("-- ", ""),
+};
+
+/// The wiring the session will actually read.
+pub(crate) fn effective(wiring: &'static Wiring) -> &'static Wiring {
+    if wiring.app == "hyprland" && config_home().join(HYPRLAND_LUA.config).is_file() {
+        return &HYPRLAND_LUA;
+    }
+    wiring
+}
+
 pub(crate) fn on_path(binary: &str) -> Option<PathBuf> {
     let paths = std::env::var_os("PATH")?;
     std::env::split_paths(&paths)
@@ -436,25 +458,8 @@ pub fn run(
 
 /// One application's wiring verdict: config present, fragment included,
 /// and the exact line to add when it is not.
-fn wire(wiring: &Wiring, current: &Path) -> Check {
-    // Hyprland 0.55+ loads hyprland.lua instead of hyprland.conf when it
-    // exists, and lua cannot source a hyprlang fragment: say so rather
-    // than handing out an include line the session would never read.
-    if wiring.app == "hyprland" {
-        let lua = config_home().join("hypr/hyprland.lua");
-        if lua.is_file() {
-            return Check {
-                section: "applications".to_owned(),
-                name: "hyprland".to_owned(),
-                required: false,
-                ok: false,
-                detail: format!("{} is a lua config", lua.display()),
-                hint: "riso's hyprland fragment is hyprlang, which a lua config \
-                       cannot source; lua fragments are on riso's roadmap"
-                    .to_owned(),
-            };
-        }
-    }
+fn wire(wiring: &'static Wiring, current: &Path) -> Check {
+    let wiring = effective(wiring);
     let config = config_home().join(wiring.config);
     let fragment = current.join(wiring.fragment);
     let line = wiring

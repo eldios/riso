@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::check::{config_home, includes_riso, on_path, Wiring, WIRINGS};
+use crate::check::{config_home, effective, includes_riso, on_path, Wiring, WIRINGS};
 
 const MARKER: &str = "added by riso config wire; riso restore puts this file back";
 
@@ -26,8 +26,6 @@ pub enum Action {
     Managed,
     /// Editing is not clearly safe; the line is shown instead.
     Manual,
-    /// This setup cannot read the fragment at all.
-    Unwireable,
     /// A declaratively managed system: configs are not riso's to edit.
     Declarative,
 }
@@ -58,7 +56,8 @@ pub fn declarative_system() -> bool {
             .unwrap_or(false)
 }
 
-fn plan_one(wiring: &Wiring, current: &Path, declarative: bool) -> Plan {
+fn plan_one(wiring: &'static Wiring, current: &Path, declarative: bool) -> Plan {
+    let wiring = effective(wiring);
     let config = config_home().join(wiring.config);
     let text = text_for(wiring, current);
 
@@ -68,15 +67,6 @@ fn plan_one(wiring: &Wiring, current: &Path, declarative: bool) -> Plan {
             config,
             action: Action::Declarative,
             text,
-        };
-    }
-
-    if wiring.app == "hyprland" && config_home().join("hypr/hyprland.lua").is_file() {
-        return Plan {
-            app: wiring.app.to_owned(),
-            config: config_home().join("hypr/hyprland.lua"),
-            action: Action::Unwireable,
-            text: "a lua config cannot source riso's hyprlang fragment".to_owned(),
         };
     }
 
@@ -165,7 +155,6 @@ pub fn describe(plan: &Plan) -> String {
             plan.app,
             plan.config.display()
         ),
-        Action::Unwireable => format!("{}: {}", plan.app, plan.text),
         Action::Declarative => format!(
             "{}: declarative system, nothing is edited; carry this into your configuration:",
             plan.app
@@ -267,6 +256,33 @@ mod tests {
             plan_one(wiring("kitty"), Path::new("/s"), false)
         });
         assert_eq!(plan.action, Action::Managed);
+    }
+
+    #[test]
+    fn a_lua_hyprland_config_gets_the_dofile_wiring() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(dir.path().join("hypr")).expect("mkdir");
+        std::fs::write(dir.path().join("hypr/hyprland.lua"), "-- mine\n").expect("write");
+        let plan = with_home(dir.path(), || {
+            plan_one(wiring("hyprland"), Path::new("/s"), false)
+        });
+        assert_eq!(plan.action, Action::Append);
+        assert!(plan.config.ends_with("hypr/hyprland.lua"));
+        assert!(plan.text.contains("pcall(dofile, \"/s/hyprland.lua\")"));
+        assert!(plan.text.starts_with("-- "));
+    }
+
+    #[test]
+    fn a_hyprlang_hyprland_config_keeps_the_source_wiring() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(dir.path().join("hypr")).expect("mkdir");
+        std::fs::write(dir.path().join("hypr/hyprland.conf"), "# mine\n").expect("write");
+        let plan = with_home(dir.path(), || {
+            plan_one(wiring("hyprland"), Path::new("/s"), false)
+        });
+        assert_eq!(plan.action, Action::Append);
+        assert!(plan.config.ends_with("hypr/hyprland.conf"));
+        assert!(plan.text.contains("source = /s/hyprland.conf"));
     }
 
     #[test]

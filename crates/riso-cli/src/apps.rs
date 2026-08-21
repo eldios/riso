@@ -41,7 +41,9 @@ pub fn run(
     template_dirs: &[PathBuf],
     plugin_dirs: &[PathBuf],
 ) -> Result<Vec<App>, String> {
-    let mut rows: BTreeMap<String, App> = BTreeMap::new();
+    // Keyed by (name, produced file): one app may own two spellings, like
+    // hyprland.conf and hyprland.lua, and both deserve a row.
+    let mut rows: BTreeMap<(String, String), App> = BTreeMap::new();
 
     // The applied theme, when there is one: its palette drives the dry
     // render, its own files are the strongest layer.
@@ -84,7 +86,7 @@ pub fn run(
             format!("templates {}", dir.display())
         };
         rows.insert(
-            stem(&file).to_owned(),
+            (stem(&file).to_owned(), file.clone()),
             App {
                 name: stem(&file).to_owned(),
                 source,
@@ -100,7 +102,7 @@ pub fn run(
                 if !entry.path().is_file() || file.starts_with('.') || is_metadata(&file) {
                     continue;
                 }
-                let key = stem(&file).to_owned();
+                let key = (stem(&file).to_owned(), file.clone());
                 let source = if rows.contains_key(&key) {
                     format!("theme {name} (overrides a template)")
                 } else {
@@ -109,7 +111,7 @@ pub fn run(
                 rows.insert(
                     key.clone(),
                     App {
-                        name: key,
+                        name: key.0,
                         source,
                         detail: file,
                     },
@@ -121,7 +123,7 @@ pub fn run(
             let count = images.filter_map(Result::ok).count();
             if count > 0 {
                 rows.insert(
-                    "backgrounds".to_owned(),
+                    ("backgrounds".to_owned(), String::new()),
                     App {
                         name: "backgrounds".to_owned(),
                         source: format!("theme {name}"),
@@ -141,11 +143,11 @@ pub fn run(
                 .next()
                 .unwrap_or(&render.target)
                 .to_owned();
-            let key = stem(&file).to_owned();
+            let key = (stem(&file).to_owned(), file.clone());
             rows.insert(
                 key.clone(),
                 App {
-                    name: key,
+                    name: key.0,
                     source: format!("plugin {}", plugin.manifest.id),
                     detail: render.target.clone(),
                 },

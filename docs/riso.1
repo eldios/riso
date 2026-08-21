@@ -142,8 +142,9 @@ first, each file asks its own confirmation (or
 for scripts), every touched file is captured so
 .B riso restore
 puts it back byte for byte, and riso keeps its hands off symlinked
-configs, files where an automatic edit could clash, and lua Hyprland
-setups, showing the line to place by hand instead.
+configs and files where an automatic edit could clash, showing the
+line to place by hand instead. A lua Hyprland config gets a dofile
+line for the hyprland.lua fragment riso renders from the palette.
 .B config apps
 lists everything the current configuration can theme and where each
 piece comes from, resolved the way a render resolves it: the applied

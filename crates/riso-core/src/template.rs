@@ -168,6 +168,14 @@ mod tests {
     }
 
     #[test]
+    fn renders_the_hyprland_lua_template() {
+        let out = render_str(include_str!("../templates/hyprland.lua.tpl"));
+        assert!(out.contains("local active = \"#7aa2f7\""));
+        assert!(out.contains("local inactive = \"rgba(595959aa)\""));
+        assert!(!out.contains("{{"));
+    }
+
+    #[test]
     fn substitutes_a_plain_key() {
         assert_eq!(render_str("bg={{ background }};"), "bg=#1a1b26;");
     }

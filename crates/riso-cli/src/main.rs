@@ -1053,6 +1053,7 @@ fn run_config(action: Option<ConfigAction>, output: OutputFormat) -> Result<(), 
                     }
                 }
                 if !wire::actionable(plan) {
+                    skipped += 1;
                     continue;
                 }
                 let go = yes
