@@ -5,7 +5,12 @@ default:
     @just --list
 
 # Every gate, in the order CI runs them.
-ci: fmt-check lint test
+ci: fmt-check lint test readme-check
+
+# The README's command table must parse in the real CLI.
+readme-check:
+    nice -n 19 cargo build -q
+    ./scripts/check-readme-commands.sh
 
 build:
     nice -n 19 cargo build

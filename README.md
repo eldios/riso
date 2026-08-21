@@ -37,6 +37,9 @@ the files your desktop reads.
 - Hyprland, Sway, niri and Omarchy recognized from the session; reads
   Omarchy themes byte-for-byte compatibly
 - Wallpapers per theme, remembered per theme
+- `riso config check` says what a fresh system is missing and the exact
+  include line each application needs; `riso config apps` says what the
+  current configuration can theme
 - One binary, a manpage, `git` and `curl` for fetching things
 
 ## Install
@@ -166,7 +169,8 @@ riso theme set --tui
 | `riso plugin list` | what teaches riso about more applications |
 | `riso dev palette\|render` | theme-author tools |
 | `riso config` | the few persistent options |
-| `riso config check` | can this system carry riso, and how to fix it |
+| `riso config check [name]` | can this system carry riso, whole or one check by name |
+| `riso config apps` | what the current configuration can theme, and from where |
 | `riso restore` | put back what riso wrote over |
 | `riso uninstall --yes` | put everything back and forget the state |
 

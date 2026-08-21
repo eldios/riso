@@ -20,3 +20,7 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
         run: cargo test
+      - name: readme commands parse
+        run: |
+          cargo build -q
+          ./scripts/check-readme-commands.sh
