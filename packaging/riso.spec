@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.4.1
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,13 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Fri Aug 21 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.5.0-1
+- config check answers by name for tools, sections and applications, with sections and the skipped list in the output
+- on Omarchy the wiring rows collapse into one: the desktop's own configs read the theme
+- config apps lists everything the current configuration can theme, resolved like a render
+- no more orphaned -debug packages from the PKGBUILDs
+- theme names match loosely and config check takes --desktop
+
 * Fri Aug 21 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.4.1-1
 - theme names match loosely: CyberPunkRED finds cyberpunk-red
 - riso config check reports missing tools and the include lines to add
