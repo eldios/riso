@@ -96,14 +96,24 @@ impl Store {
             return Ok(None);
         };
 
+        // exists() follows symlinks, so a dangling one reads as absent:
+        // judge presence by the entry itself, and never write through a
+        // link something else planted at the path.
+        let present = std::fs::symlink_metadata(target).is_ok();
+        let is_symlink = std::fs::symlink_metadata(target)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false);
         let outcome = match entry.backup {
             Some(backup) => {
+                if is_symlink {
+                    std::fs::remove_file(target).map_err(|e| IoError::Write(target.into(), e))?;
+                }
                 std::fs::copy(&backup, target).map_err(|e| IoError::Write(target.into(), e))?;
                 let _ = std::fs::remove_file(&backup);
                 Restored::Contents(target.to_path_buf())
             }
             None => {
-                if target.exists() {
+                if present {
                     std::fs::remove_file(target).map_err(|e| IoError::Write(target.into(), e))?;
                 }
                 Restored::Removed(target.to_path_buf())
@@ -172,6 +182,19 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restore_removes_a_dangling_symlink_captured_as_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut store = Store::open(&dir.path().join("ownership")).expect("store");
+        let target = dir.path().join("palettes/riso.json");
+        store.capture(&target).expect("capture");
+        std::fs::create_dir_all(target.parent().unwrap()).expect("mkdir");
+        std::os::unix::fs::symlink("/nowhere/noctalia.json", &target).expect("symlink");
+
+        store.restore(&target).expect("restore");
+        assert!(std::fs::symlink_metadata(&target).is_err());
+    }
 
     fn write(path: &Path, contents: &str) {
         std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");

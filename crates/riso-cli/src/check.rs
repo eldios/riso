@@ -29,6 +29,8 @@ pub(crate) struct Wiring {
     pub(crate) config: &'static str,
     pub(crate) fragment: &'static str,
     pub(crate) include: &'static str,
+    /// The config IS a symlink to the fragment, not a file including it.
+    pub(crate) link: bool,
     /// Where the line must land: CSS @import and mako's include only
     /// mean what they should at the top of the file.
     pub(crate) prepend: bool,
@@ -48,6 +50,7 @@ pub(crate) const WIRINGS: &[Wiring] = &[
         config: "alacritty/alacritty.toml",
         fragment: "alacritty.toml",
         include: "[general]\nimport = [\"{}\"]",
+        link: false,
         prepend: false,
         conflict: Some("[general]"),
         comment: ("# ", ""),
@@ -58,6 +61,7 @@ pub(crate) const WIRINGS: &[Wiring] = &[
         config: "kitty/kitty.conf",
         fragment: "kitty.conf",
         include: "include {}",
+        link: false,
         prepend: false,
         conflict: None,
         comment: ("# ", ""),
@@ -68,6 +72,7 @@ pub(crate) const WIRINGS: &[Wiring] = &[
         config: "ghostty/config",
         fragment: "ghostty.conf",
         include: "config-file = {}",
+        link: false,
         prepend: false,
         conflict: None,
         comment: ("# ", ""),
@@ -78,6 +83,7 @@ pub(crate) const WIRINGS: &[Wiring] = &[
         config: "foot/foot.ini",
         fragment: "foot.ini",
         include: "[main]\ninclude={}",
+        link: false,
         prepend: false,
         conflict: Some("[main]"),
         comment: ("# ", ""),
@@ -88,6 +94,7 @@ pub(crate) const WIRINGS: &[Wiring] = &[
         config: "mako/config",
         fragment: "mako.ini",
         include: "include={}",
+        link: false,
         prepend: true,
         conflict: None,
         comment: ("# ", ""),
@@ -98,6 +105,7 @@ pub(crate) const WIRINGS: &[Wiring] = &[
         config: "waybar/style.css",
         fragment: "waybar.css",
         include: "@import \"{}\";",
+        link: false,
         prepend: true,
         conflict: None,
         comment: ("/* ", " */"),
@@ -108,6 +116,7 @@ pub(crate) const WIRINGS: &[Wiring] = &[
         config: "hypr/hyprland.conf",
         fragment: "hyprland.conf",
         include: "source = {}",
+        link: false,
         prepend: false,
         conflict: None,
         comment: ("# ", ""),
@@ -118,6 +127,7 @@ pub(crate) const WIRINGS: &[Wiring] = &[
         config: "hypr/hyprlock.conf",
         fragment: "hyprlock.conf",
         include: "source = {}",
+        link: false,
         prepend: false,
         conflict: None,
         comment: ("# ", ""),
@@ -128,9 +138,24 @@ pub(crate) const WIRINGS: &[Wiring] = &[
         config: "btop/btop.conf",
         fragment: "btop.theme",
         include: "color_theme = \"{}\"",
+        link: false,
         prepend: false,
         conflict: Some("color_theme"),
         comment: ("# ", ""),
+    },
+    // Noctalia reads custom palettes from its own directory: the wiring
+    // is a symlink to the fragment, and riso's apply hook makes the
+    // shell re-read it (color-scheme-set custom riso).
+    Wiring {
+        app: "noctalia",
+        binary: "noctalia",
+        config: "noctalia/palettes/riso.json",
+        fragment: "noctalia.json",
+        include: "ln -sfn {} ~/.config/noctalia/palettes/riso.json",
+        link: true,
+        prepend: false,
+        conflict: None,
+        comment: ("", ""),
     },
 ];
 
@@ -143,6 +168,7 @@ pub(crate) static HYPRLAND_LUA: Wiring = Wiring {
     config: "hypr/hyprland.lua",
     fragment: "hyprland.lua",
     include: "local ok, err = pcall(dofile, \"{}\")\nif err then print(err) end",
+    link: false,
     prepend: false,
     conflict: None,
     comment: ("-- ", ""),
@@ -466,6 +492,30 @@ fn wire(wiring: &'static Wiring, current: &Path) -> Check {
         .include
         .replace("{}", &fragment.display().to_string())
         .replace('\n', "\n    ");
+
+    if wiring.link {
+        let (ok, detail, hint) = match std::fs::read_link(&config) {
+            Ok(target) if target == fragment => (true, config.display().to_string(), String::new()),
+            Ok(target) => (
+                false,
+                format!("{} points at {}", config.display(), target.display()),
+                format!("please relink it:\n    {line}"),
+            ),
+            Err(_) => (
+                false,
+                format!("{} does not exist", config.display()),
+                format!("please link the palette:\n    {line}"),
+            ),
+        };
+        return Check {
+            section: "applications".to_owned(),
+            name: wiring.app.to_owned(),
+            required: false,
+            ok,
+            detail,
+            hint,
+        };
+    }
 
     let (ok, detail, hint) = if !config.is_file() {
         (

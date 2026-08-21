@@ -10,6 +10,7 @@ mod config;
 mod data;
 mod dev;
 mod install;
+mod noctalia;
 mod outputs;
 mod plugin;
 mod state;

@@ -148,6 +148,9 @@ line to place by hand instead. On a declaratively managed system
 ever edited: every line is only shown, to carry into the system
 configuration. A lua Hyprland config gets a dofile
 line for the hyprland.lua fragment riso renders from the palette.
+Noctalia is wired by a symlink instead of a line: its palettes
+directory gets riso.json pointing at the fragment, and every apply
+tells a running Noctalia to re-read it and to take the wallpaper.
 .B config apps
 lists everything the current configuration can theme and where each
 piece comes from, resolved the way a render resolves it: the applied

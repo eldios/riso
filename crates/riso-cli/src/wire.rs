@@ -20,6 +20,8 @@ pub enum Action {
     Prepend,
     /// The file does not exist and would be created.
     Create,
+    /// The config is a symlink to riso's fragment, and would be created.
+    Link,
     /// Nothing to do: the config already reads riso's tree.
     AlreadyWired,
     /// The config is a symlink: managed elsewhere, not ours to edit.
@@ -36,6 +38,8 @@ pub struct Plan {
     pub config: PathBuf,
     pub action: Action,
     pub text: String,
+    /// What a Link action points the config at.
+    pub target: PathBuf,
 }
 
 fn text_for(wiring: &Wiring, current: &Path) -> String {
@@ -43,6 +47,11 @@ fn text_for(wiring: &Wiring, current: &Path) -> String {
     let line = wiring
         .include
         .replace("{}", &fragment.display().to_string());
+    if wiring.link {
+        // A symlink carries no marker comment; the ownership store is
+        // what makes restore undo it.
+        return format!("{line}\n");
+    }
     let (open, close) = wiring.comment;
     format!("{open}{MARKER}{close}\n{line}\n")
 }
@@ -68,17 +77,25 @@ fn plan_one(wiring: &'static Wiring, current: &Path, declarative: bool) -> Plan 
     let config = config_home().join(wiring.config);
     let text = text_for(wiring, current);
 
-    if declarative && !includes_riso(&config) {
+    let already_linked = wiring.link
+        && std::fs::read_link(&config).is_ok_and(|target| target == current.join(wiring.fragment));
+    if declarative && !already_linked && !includes_riso(&config) {
         return Plan {
             app: wiring.app.to_owned(),
             config,
             action: Action::Declarative,
             text,
+            target: current.join(wiring.fragment),
         };
     }
 
     let action = match std::fs::symlink_metadata(&config) {
+        Err(_) if wiring.link => Action::Link,
         Err(_) => Action::Create,
+        Ok(_) if wiring.link => match std::fs::read_link(&config) {
+            Ok(target) if target == current.join(wiring.fragment) => Action::AlreadyWired,
+            _ => Action::Manual,
+        },
         Ok(_) if includes_riso(&config) => Action::AlreadyWired,
         Ok(meta) if meta.file_type().is_symlink() => Action::Managed,
         Ok(_) => {
@@ -96,6 +113,7 @@ fn plan_one(wiring: &'static Wiring, current: &Path, declarative: bool) -> Plan 
         config,
         action,
         text,
+        target: current.join(wiring.fragment),
     }
 }
 
@@ -129,6 +147,14 @@ pub fn plan(state_dir: &Path, apps: &[String], declarative: bool) -> Result<Vec<
 pub fn apply(plan: &Plan, store: &mut riso_core::snapshot::Store) -> Result<(), String> {
     store.capture(&plan.config).map_err(|e| e.to_string())?;
 
+    if plan.action == Action::Link {
+        if let Some(parent) = plan.config.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        return std::os::unix::fs::symlink(&plan.target, &plan.config)
+            .map_err(|e| format!("{}: {e}", plan.config.display()));
+    }
+
     let existing = std::fs::read_to_string(&plan.config).unwrap_or_default();
     let written = match plan.action {
         Action::Prepend => format!("{}{existing}", plan.text),
@@ -151,6 +177,12 @@ pub fn describe(plan: &Plan) -> String {
         Action::Append => format!("{}: append to {}", plan.app, plan.config.display()),
         Action::Prepend => format!("{}: prepend to {}", plan.app, plan.config.display()),
         Action::Create => format!("{}: create {}", plan.app, plan.config.display()),
+        Action::Link => format!(
+            "{}: link {} -> {}",
+            plan.app,
+            plan.config.display(),
+            plan.target.display()
+        ),
         Action::AlreadyWired => format!("{}: already wired ({})", plan.app, plan.config.display()),
         Action::Managed => format!(
             "{}: {} is a symlink, managed elsewhere; add the line to its source instead",
@@ -173,7 +205,7 @@ pub fn describe(plan: &Plan) -> String {
 pub fn actionable(plan: &Plan) -> bool {
     matches!(
         plan.action,
-        Action::Append | Action::Prepend | Action::Create
+        Action::Append | Action::Prepend | Action::Create | Action::Link
     )
 }
 
@@ -295,6 +327,62 @@ mod tests {
     }
 
     #[test]
+    fn a_missing_palette_plans_a_link_and_apply_creates_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let plan = with_home(dir.path(), || {
+            plan_one(wiring("noctalia"), Path::new("/s"), false)
+        });
+        assert_eq!(plan.action, Action::Link);
+        assert_eq!(plan.target, Path::new("/s/noctalia.json"));
+
+        let store_dir = dir.path().join("ownership");
+        let mut store = riso_core::snapshot::Store::open(&store_dir).expect("store");
+        apply(&plan, &mut store).expect("apply");
+        assert_eq!(
+            std::fs::read_link(&plan.config).expect("link"),
+            Path::new("/s/noctalia.json")
+        );
+
+        store.restore(&plan.config).expect("restore");
+        assert!(std::fs::symlink_metadata(&plan.config).is_err());
+    }
+
+    #[test]
+    fn a_palette_linked_at_the_fragment_is_already_wired() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(dir.path().join("noctalia/palettes")).expect("mkdir");
+        std::os::unix::fs::symlink(
+            "/s/noctalia.json",
+            dir.path().join("noctalia/palettes/riso.json"),
+        )
+        .expect("symlink");
+        let plan = with_home(dir.path(), || {
+            plan_one(wiring("noctalia"), Path::new("/s"), false)
+        });
+        assert_eq!(plan.action, Action::AlreadyWired);
+        // Declarative systems report it the same way.
+        let plan = with_home(dir.path(), || {
+            plan_one(wiring("noctalia"), Path::new("/s"), true)
+        });
+        assert_eq!(plan.action, Action::AlreadyWired);
+    }
+
+    #[test]
+    fn a_palette_pointing_elsewhere_is_manual() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(dir.path().join("noctalia/palettes")).expect("mkdir");
+        std::os::unix::fs::symlink(
+            "/elsewhere.json",
+            dir.path().join("noctalia/palettes/riso.json"),
+        )
+        .expect("symlink");
+        let plan = with_home(dir.path(), || {
+            plan_one(wiring("noctalia"), Path::new("/s"), false)
+        });
+        assert_eq!(plan.action, Action::Manual);
+    }
+
+    #[test]
     fn a_declarative_system_refuses_every_edit() {
         let dir = tempfile::tempdir().expect("tempdir");
         std::fs::create_dir_all(dir.path().join("kitty")).expect("mkdir");
@@ -330,6 +418,7 @@ mod tests {
             config: config.clone(),
             action: Action::Prepend,
             text: "/* marker */\n@import \"x\";\n".to_owned(),
+            target: PathBuf::new(),
         };
         apply(&plan, &mut store).expect("apply");
         let written = std::fs::read_to_string(&config).expect("read");

@@ -131,6 +131,14 @@ impl Desktop {
     /// effort: a helper this installation does not carry is not an error,
     /// and one that fails does not stop the rest.
     pub fn post_apply(self, exec: &dyn Executor) {
+        // Noctalia runs on any wlroots compositor and follows the theme
+        // over IPC: setting the custom scheme rewrites its config and
+        // re-reads the palette riso rendered, unconditionally. Best
+        // effort, like every hook here: no Noctalia, no harm.
+        let _ = exec.run(
+            "noctalia",
+            &noctalia_args(&["msg", "color-scheme-set", "custom", "riso"]),
+        );
         if self != Self::Omarchy {
             return;
         }
@@ -165,6 +173,16 @@ impl Desktop {
         image: &std::path::Path,
         shell_config: Option<&std::path::Path>,
     ) -> Result<(), ReloadError> {
+        // Noctalia is its own wallpaper daemon wherever it runs; telling
+        // it is not guessing. Best effort, before the desktop's own path.
+        let _ = exec.run(
+            "noctalia",
+            &[
+                "msg".to_owned(),
+                "wallpaper-set".to_owned(),
+                image.to_string_lossy().into_owned(),
+            ],
+        );
         if self != Self::Omarchy {
             return Ok(());
         }
@@ -195,6 +213,10 @@ impl Desktop {
             ),
         }
     }
+}
+
+fn noctalia_args(args: &[&str]) -> Vec<String> {
+    args.iter().map(|a| (*a).to_owned()).collect()
 }
 
 #[cfg(test)]
@@ -316,35 +338,42 @@ mod tests {
     }
 
     #[test]
-    fn hands_omarchy_the_wallpaper_and_nobody_else() {
+    fn hands_the_wallpaper_to_noctalia_everywhere_and_to_omarchy_on_omarchy() {
         let recorder = RecordingExecutor::default();
         Desktop::Omarchy
             .set_background(&recorder, std::path::Path::new("/b/img.png"), None)
             .expect("set");
         assert_eq!(
             recorder.calls(),
-            ["omarchy-shell -q background set /b/img.png"]
+            [
+                "noctalia msg wallpaper-set /b/img.png",
+                "omarchy-shell -q background set /b/img.png"
+            ]
         );
 
         let recorder = RecordingExecutor::default();
         Desktop::Hyprland
             .set_background(&recorder, std::path::Path::new("/b/img.png"), None)
             .expect("set");
-        assert!(recorder.calls().is_empty());
+        assert_eq!(recorder.calls(), ["noctalia msg wallpaper-set /b/img.png"]);
     }
 
     #[test]
-    fn omarchy_runs_its_retint_hooks_and_nobody_else_does() {
+    fn noctalia_re_reads_the_palette_everywhere_and_omarchy_keeps_its_hooks() {
         let recorder = RecordingExecutor::default();
         Desktop::Omarchy.post_apply(&recorder);
         let calls = recorder.calls();
         let ran = |name: &str| calls.iter().any(|c| c.trim_end() == name);
+        assert!(ran("noctalia msg color-scheme-set custom riso"));
         assert!(ran("omarchy-restart-terminal"));
         assert!(ran("omarchy-theme-set-vscode"));
 
         let recorder = RecordingExecutor::default();
         Desktop::Hyprland.post_apply(&recorder);
-        assert!(recorder.calls().is_empty());
+        assert_eq!(
+            recorder.calls(),
+            ["noctalia msg color-scheme-set custom riso"]
+        );
     }
 
     #[test]

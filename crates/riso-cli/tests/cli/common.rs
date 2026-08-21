@@ -72,6 +72,22 @@ impl Sandbox {
         cmd
     }
 
+    /// A fake executable that appends its arguments to calls-<name>.log.
+    pub fn logging_bin(&self, name: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let path = self.home().join("bin").join(name);
+        std::fs::write(
+            &path,
+            format!("#!/bin/sh\necho \"$@\" >> \"$HOME/calls-{name}.log\"\n"),
+        )
+        .expect("write");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+
+    pub fn calls(&self, name: &str) -> String {
+        std::fs::read_to_string(self.home().join(format!("calls-{name}.log"))).unwrap_or_default()
+    }
+
     /// Link a host binary into the sandbox PATH; the test process's own
     /// PATH says where it lives.
     pub fn real_bin(&self, name: &str) {
