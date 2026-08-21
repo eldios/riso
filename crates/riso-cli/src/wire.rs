@@ -49,7 +49,14 @@ fn text_for(wiring: &Wiring, current: &Path) -> String {
 
 /// Whether this system manages its configuration declaratively: on
 /// NixOS every imperative edit is a lie the next rebuild reverts.
+/// `RISO_DECLARATIVE=1|0` overrides the probe, for immutable distros
+/// the probe does not know and for tests.
 pub fn declarative_system() -> bool {
+    match std::env::var("RISO_DECLARATIVE").as_deref() {
+        Ok("1") => return true,
+        Ok("0") => return false,
+        _ => {}
+    }
     Path::new("/etc/NIXOS").exists()
         || std::fs::read_to_string("/etc/os-release")
             .map(|s| s.lines().any(|l| l == "ID=nixos"))
@@ -268,7 +275,9 @@ mod tests {
         });
         assert_eq!(plan.action, Action::Append);
         assert!(plan.config.ends_with("hypr/hyprland.lua"));
-        assert!(plan.text.contains("pcall(dofile, \"/s/hyprland.lua\")\nif err then print(err) end"));
+        assert!(plan
+            .text
+            .contains("pcall(dofile, \"/s/hyprland.lua\")\nif err then print(err) end"));
         assert!(plan.text.starts_with("-- "));
     }
 

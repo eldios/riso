@@ -28,6 +28,10 @@ lint:
 test:
     nice -n 19 cargo test
 
+# Line-coverage report; --open for the HTML view
+coverage *args:
+    nice -n 19 cargo llvm-cov --workspace --all-features {{args}}
+
 # Render a theme, for a quick look. Templates live upstream for now, so point
 # at a checkout: `just render <theme-dir> <out-dir> target/omarchy-v4.0.0/default/themed`
 render theme out templates:

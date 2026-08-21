@@ -143,7 +143,10 @@ for scripts), every touched file is captured so
 .B riso restore
 puts it back byte for byte, and riso keeps its hands off symlinked
 configs and files where an automatic edit could clash, showing the
-line to place by hand instead. A lua Hyprland config gets a dofile
+line to place by hand instead. On a declaratively managed system
+(NixOS is detected; RISO_DECLARATIVE=1 declares any other) nothing is
+ever edited: every line is only shown, to carry into the system
+configuration. A lua Hyprland config gets a dofile
 line for the hyprland.lua fragment riso renders from the palette.
 .B config apps
 lists everything the current configuration can theme and where each
