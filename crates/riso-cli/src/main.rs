@@ -3,6 +3,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+mod apps;
 mod check;
 mod data;
 mod gui;
@@ -97,6 +98,17 @@ enum ConfigAction {
     /// Print every option and its value
     #[command(visible_alias = "l")]
     List,
+    /// What the current configuration can theme, and where each piece
+    /// comes from: built-in, theme, or plugin
+    #[command(visible_alias = "a")]
+    Apps {
+        /// Where the generated theme lives
+        #[arg(long, value_name = "DIR")]
+        state: Option<PathBuf>,
+        /// Template directory; repeat for more, earlier ones take precedence
+        #[arg(long = "templates", value_name = "DIR")]
+        template_dirs: Vec<PathBuf>,
+    },
     /// Can this system carry riso: tools, desktop, and include wiring
     #[command(visible_alias = "k")]
     Check {
@@ -1005,6 +1017,22 @@ fn run_config(action: Option<ConfigAction>, output: OutputFormat) -> Result<(), 
     use riso_core::config::Config;
 
     match action.unwrap_or(ConfigAction::List) {
+        ConfigAction::Apps {
+            state,
+            template_dirs,
+        } => {
+            let state_dir = state_or_default(state)?;
+            let rows = apps::run(
+                &state_dir,
+                &catalog::default_theme_dirs(),
+                &template_dirs,
+                &[user_plugin_dir()?],
+            )?;
+            if !emit(output, &rows)? {
+                apps::print(&rows);
+            }
+            Ok(())
+        }
         ConfigAction::Check {
             name,
             state,
