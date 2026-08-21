@@ -373,6 +373,24 @@ pub fn run(
 /// One application's wiring verdict: config present, fragment included,
 /// and the exact line to add when it is not.
 fn wire(wiring: &Wiring, current: &Path) -> Check {
+    // Hyprland 0.55+ loads hyprland.lua instead of hyprland.conf when it
+    // exists, and lua cannot source a hyprlang fragment: say so rather
+    // than handing out an include line the session would never read.
+    if wiring.app == "hyprland" {
+        let lua = config_home().join("hypr/hyprland.lua");
+        if lua.is_file() {
+            return Check {
+                section: "applications".to_owned(),
+                name: "hyprland".to_owned(),
+                required: false,
+                ok: false,
+                detail: format!("{} is a lua config", lua.display()),
+                hint: "riso's hyprland fragment is hyprlang, which a lua config \
+                       cannot source; lua fragments are on riso's roadmap"
+                    .to_owned(),
+            };
+        }
+    }
     let config = config_home().join(wiring.config);
     let fragment = current.join(wiring.fragment);
     let line = wiring
