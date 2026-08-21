@@ -437,9 +437,16 @@ fn run_plugin(action: PluginAction, output: OutputFormat) -> Result<(), String> 
                 Some(dir) => dir,
                 None => user_plugin_dir()?,
             };
-            let path = into.join(&name);
+            // The name may be the directory or the manifest id `list`
+            // prints; both must work.
+            let mut path = into.join(&name);
             if !path.join("manifest.toml").is_file() {
-                return Err(format!("nothing named '{name}' is installed"));
+                let plugins = riso_core::plugin::discover(std::slice::from_ref(&into))
+                    .map_err(|e| e.to_string())?;
+                match plugins.into_iter().find(|p| p.manifest.id == name) {
+                    Some(plugin) => path = plugin.dir,
+                    None => return Err(format!("nothing named '{name}' is installed")),
+                }
             }
             std::fs::remove_dir_all(&path)
                 .map_err(|e| format!("removing {}: {e}", path.display()))?;
