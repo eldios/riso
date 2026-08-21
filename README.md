@@ -215,9 +215,11 @@ catalog at all, which is exactly why the check runs twice.
 
 ## Themes
 
-The [catalog](https://github.com/eldios/riso-themes) is a static index
-pointing at ordinary git repositories, so publishing a theme needs no
-account anywhere and installing one is a clone with a checksum.
+These two are the official themes. The catalog grows with community
+submissions: browse it at [catalog.riso.re](https://catalog.riso.re).
+It is a [static index](https://github.com/eldios/riso-themes) pointing
+at ordinary git repositories, so publishing a theme needs no account
+anywhere and installing one is a clone with a checksum.
 
 | | |
 | :---: | :---: |
