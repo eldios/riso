@@ -2063,7 +2063,7 @@ checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 
 [[package]]
 name = "riso-cli"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "clap",
  "crossterm",
@@ -2079,7 +2079,7 @@ dependencies = [
 
 [[package]]
 name = "riso-core"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "serde",
  "serde_json",

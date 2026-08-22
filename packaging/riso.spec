@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.6.2
+Version:        0.6.3
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,10 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Sat Aug 22 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.6.3-1
+- Noctalia follows the theme on any desktop: config wire links its palette at the fragment, and every apply re-reads it and hands over the wallpaper.
+- The ownership store restores dangling symlinks correctly.
+
 * Sat Aug 22 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.6.2-1
 - The guarded dofile wiring line reads as two short lines in check hints.
 - plugin remove accepts the id plugin list prints.
