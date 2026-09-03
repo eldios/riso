@@ -106,10 +106,20 @@ Set or print how the wallpaper is scaled
 .B "backgrounds get"
 Print the wallpaper in use and its mode.
 .TP
-.B "plugin list|install|remove"
-Manage plugins, which teach
-.B riso
-to theme applications it does not know about.
+.B "plugin list"
+List installed plugins: id, name and how many files each renders.
+.TP
+.BI "plugin install " URL
+Clone a plugin from a git repository into
+.IR ~/.config/riso/plugins ,
+under the name derived from the URL or the one
+.B \-\-name
+gives. A plugin is code that runs on the machine: read it first.
+.TP
+.BI "plugin remove " NAME
+Delete an installed plugin, by its directory name or by the id
+.B plugin list
+prints. See PLUGINS for what a plugin is.
 .TP
 .B "config [list|get|set|apps|check [name]|wire [app...]]"
 Read and change the few options kept in
@@ -158,9 +168,22 @@ theme's own files, then each
 .B \-\-templates
 directory in order, then the templates built into riso, plus plugins.
 .TP
-.B "dev palette|render"
-Tools for theme authors: print a theme's palette as resolved key and value
-pairs, or render a theme into a directory without applying it.
+.BI "dev palette \-\-theme " DIR
+Print a theme's palette as resolved key and value pairs, derived colors
+included, the way templates see it. The first thing to run when a
+rendered color is not the one expected.
+.TP
+.BI "dev render \-\-theme " DIR " \-\-out " DIR
+Render a theme into a directory without applying it: the theme's own
+files are copied, then every template writes its output beside them.
+.B \-\-templates
+adds template directories,
+.B \-\-no\-builtin
+leaves out the templates compiled into
+.BR riso ,
+and
+.B \-\-dry\-run
+reports what would be written without writing it.
 .TP
 .B restore
 Put back every file
@@ -241,6 +264,51 @@ When the whole path turns up nothing, the theme compiled into
 .B riso
 is written to the user directory as an ordinary editable theme, so applying a
 theme never depends on having installed one first.
+.SH PLUGINS
+A plugin teaches
+.B riso
+to theme one more application. It is a directory holding
+.I manifest.toml
+and the templates the manifest names, installed from a git repository
+with
+.BR "plugin install" .
+The manifest's top-level keys come first, then one
+.B [[render]]
+table per file:
+.PP
+.nf
+id = "zed"
+api = 1
+name = "Zed"
+description = "Zed editor colors"
+requires = "zed"
+reload = ["pkill", "-USR1", "zed"]
+
+[[render]]
+template = "zed.json.tpl"
+target = "~/.config/zed/riso.json"
+.fi
+.PP
+.B id
+names the plugin;
+.B api
+is the manifest version this
+.B riso
+understands (1). With
+.B requires
+set, the plugin is skipped when that program is not on PATH.
+.B reload
+runs after the files are written, as program and arguments. Each
+.B [[render]]
+entry renders one template, relative to the plugin directory, to its
+target, where
+.I ~/
+is expanded. Templates use the same
+.B {{ key }}
+placeholders as the built-in ones, and the rendered targets are
+captured in the ownership store, so
+.B riso restore
+undoes them.
 .SH ENVIRONMENT
 .TP
 .B RISO_THEMES
