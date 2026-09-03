@@ -1,0 +1,39 @@
+---
+name: Bug report
+description: Something riso does wrong
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: riso version
+      description: Output of `riso --version`
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Distribution and desktop
+      description: Output of `riso config check`, or the distro and shell in use
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did
+      description: The commands, in order
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Output, error text, screenshots
+    validations:
+      required: true

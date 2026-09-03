@@ -1,0 +1,9 @@
+---
+blank_issues_enabled: true
+contact_links:
+  - name: Theme catalog
+    url: https://github.com/eldios/riso-themes
+    about: Submit or fix a theme listing there
+  - name: Security
+    url: https://github.com/eldios/riso/security/advisories/new
+    about: Report a vulnerability privately
