@@ -15,7 +15,9 @@ toml = "0.8"
 clap = { version = "4", features = ["derive"] }
 serde_norway = "0.9"
 ratatui = "0.30"
-ratatui-image = { version = "11", default-features = false, features = ["image-defaults", "crossterm"] }
-image = "0.25"
+ratatui-image = { version = "11", default-features = false, features = ["crossterm"] }
+# Previews and wallpapers are png, jpeg or webp; the default set pulls in
+# avif and exr encoders riso never uses.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "rayon"] }
 crossterm = "0.29"
 tempfile = "3"
