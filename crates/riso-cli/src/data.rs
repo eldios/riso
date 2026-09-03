@@ -134,3 +134,39 @@ fn fetch_preview(url: &str, cache: &Path, name: &str) -> Option<PathBuf> {
 pub fn current_background(state: &Path) -> Option<PathBuf> {
     riso_core::background::current(&state.join("current/background"))
 }
+
+/// `riso carousel-data`: the rows a picker reads, or what is current.
+pub(crate) fn run(what: &str, current: bool) -> Result<(), String> {
+    let state = crate::paths::default_state_dir()?;
+    if current {
+        match what {
+            "backgrounds" => {
+                if let Some(path) = current_background(&state) {
+                    println!("{}", path.display());
+                }
+            }
+            _ => {
+                if let Some(name) = current_theme(&state) {
+                    println!("{name}");
+                }
+            }
+        }
+        return Ok(());
+    }
+    let rows = match what {
+        "backgrounds" => background_rows(&state),
+        "catalog" => catalog_rows(
+            &riso_core::reload::ProcessExecutor,
+            crate::paths::DEFAULT_CATALOG,
+        ),
+        _ => theme_rows(),
+    };
+    for row in rows {
+        let preview = row
+            .preview
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        println!("{}\t{preview}\t{}", row.label, row.value);
+    }
+    Ok(())
+}

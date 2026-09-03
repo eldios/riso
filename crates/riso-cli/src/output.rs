@@ -39,3 +39,41 @@ pub fn emit<T: Serialize>(format: OutputFormat, value: &T) -> Result<bool, Strin
         }
     }
 }
+
+/// The format config.toml asks for, when `-o` does not override it. A
+/// value the enum does not know is reported and ignored, never fatal.
+pub fn default_output() -> OutputFormat {
+    let config = riso_core::config::Config::load_or_default();
+    match OutputFormat::from_str(&config.output, true) {
+        Ok(format) => format,
+        Err(_) => {
+            eprintln!(
+                "riso: config.toml asks for output {:?}, which is not human, json or yaml; using human",
+                config.output
+            );
+            OutputFormat::Human
+        }
+    }
+}
+
+/// Warnings go to stderr so they never contaminate piped output.
+pub fn report_warnings(warnings: &[riso_core::palette::Warning]) {
+    use riso_core::palette::Warning;
+    for warning in warnings {
+        let text = match warning {
+            Warning::UnsupportedKey { line } => {
+                format!("line {line}: key has unsupported characters, skipped")
+            }
+            Warning::UnsupportedValue { line, key } => {
+                format!("line {line}: value of '{key}' has unsupported characters, skipped")
+            }
+            Warning::EmptyValue { key } => {
+                format!("'{key}' resolved to nothing, its placeholder will render empty")
+            }
+            Warning::UnderivableColor { key, source } => {
+                format!("cannot derive '{key}': '{source}' is not a hex color")
+            }
+        };
+        eprintln!("riso: {text}");
+    }
+}

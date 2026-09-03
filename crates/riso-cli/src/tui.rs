@@ -33,14 +33,15 @@ pub fn run(what: What, purpose: Purpose, state: Option<std::path::PathBuf>) -> R
 
     let state = match state {
         Some(dir) => dir,
-        None => crate::default_state_dir()?,
+        None => crate::paths::default_state_dir()?,
     };
     let rows = match what {
         What::Themes => data::theme_rows(),
         What::Backgrounds => data::background_rows(&state),
-        What::Catalog => {
-            data::catalog_rows(&riso_core::reload::ProcessExecutor, crate::DEFAULT_CATALOG)
-        }
+        What::Catalog => data::catalog_rows(
+            &riso_core::reload::ProcessExecutor,
+            crate::paths::DEFAULT_CATALOG,
+        ),
     };
     if rows.is_empty() {
         return Err(match what {
@@ -109,6 +110,137 @@ fn drain_pending_input() {
 }
 
 /// The event loop: browse, filter, choose.
+/// The picker's state between two frames.
+struct Browse<'a> {
+    rows: &'a [data::Row],
+    what: What,
+    purpose: Purpose,
+    filter: String,
+    selected: usize,
+}
+
+impl Browse<'_> {
+    /// The rows the filter lets through, in order.
+    fn shown(&self) -> Vec<usize> {
+        let needle = self.filter.to_lowercase();
+        self.rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| needle.is_empty() || row.label.to_lowercase().contains(&needle))
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    fn title(&self) -> &'static str {
+        match (self.what, self.purpose) {
+            (What::Catalog, _) => " riso - catalog ",
+            (What::Themes, Purpose::Browse) => " riso - themes (browsing) ",
+            (What::Themes, _) => " riso - themes ",
+            (What::Backgrounds, Purpose::Browse) => " riso - backgrounds (browsing) ",
+            (What::Backgrounds, _) => " riso - backgrounds ",
+        }
+    }
+
+    fn hints(&self) -> String {
+        if !self.filter.is_empty() {
+            return format!("filter: {}  (Backspace edits, Esc clears)", self.filter);
+        }
+        let action = match self.purpose {
+            Purpose::Apply => "Enter applies",
+            Purpose::Browse => "Enter does nothing",
+            Purpose::Install => "Enter installs",
+        };
+        format!("type to filter - arrows move - {action} - Esc quits")
+    }
+
+    fn name_line(&self, shown: &[usize]) -> Line<'static> {
+        if shown.is_empty() {
+            return Line::from("nothing matches");
+        }
+        let position = shown.iter().position(|i| *i == self.selected).unwrap_or(0);
+        Line::from(format!(
+            "< {} >  {}/{}",
+            self.rows[self.selected].label,
+            position + 1,
+            shown.len()
+        ))
+        .style(Style::default().add_modifier(Modifier::BOLD))
+    }
+
+    fn draw(
+        &self,
+        frame: &mut ratatui::Frame,
+        shown: &[usize],
+        preview: Option<&mut StatefulProtocol>,
+    ) {
+        let [image_area, name_area, hint_area] = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .margin(1)
+        .areas(frame.area());
+        frame.render_widget(Block::bordered().title(self.title()), frame.area());
+        match preview {
+            Some(protocol) => {
+                let widget = StatefulImage::<StatefulProtocol>::new().resize(Resize::Fit(None));
+                frame.render_stateful_widget(widget, image_area, protocol);
+            }
+            None => frame.render_widget(
+                Paragraph::new("no preview").alignment(Alignment::Center),
+                image_area,
+            ),
+        }
+        frame.render_widget(
+            Paragraph::new(self.name_line(shown)).alignment(Alignment::Center),
+            name_area,
+        );
+        frame.render_widget(
+            Paragraph::new(self.hints()).alignment(Alignment::Center),
+            hint_area,
+        );
+    }
+
+    /// The neighbour of the selection among the shown rows, wrapping.
+    fn step(&self, shown: &[usize], forward: bool) -> usize {
+        let Some(at) = shown.iter().position(|i| *i == self.selected) else {
+            return self.selected;
+        };
+        let next = if forward {
+            (at + 1) % shown.len()
+        } else {
+            (at + shown.len() - 1) % shown.len()
+        };
+        shown[next]
+    }
+
+    /// One key press; Some when the picker is done.
+    fn on_key(&mut self, key: event::KeyEvent, shown: &[usize]) -> Option<Exit> {
+        match key.code {
+            KeyCode::Esc if !self.filter.is_empty() => self.filter.clear(),
+            KeyCode::Esc => return Some(Exit::Quit),
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                return Some(Exit::Quit)
+            }
+            KeyCode::Enter if self.purpose != Purpose::Browse && !shown.is_empty() => {
+                return Some(Exit::Chosen(self.rows[self.selected].value.clone()))
+            }
+            KeyCode::Left | KeyCode::Up if !shown.is_empty() => {
+                self.selected = self.step(shown, false)
+            }
+            KeyCode::Right | KeyCode::Down | KeyCode::Tab if !shown.is_empty() => {
+                self.selected = self.step(shown, true)
+            }
+            KeyCode::Backspace => {
+                self.filter.pop();
+            }
+            KeyCode::Char(c) => self.filter.push(c),
+            _ => {}
+        }
+        None
+    }
+}
+
 fn browse(
     terminal: &mut ratatui::DefaultTerminal,
     picker: &Picker,
@@ -124,133 +256,45 @@ fn browse(
     let started = std::time::Instant::now();
     let settle = std::time::Duration::from_millis(500);
 
-    let mut filter = String::new();
-    let mut selected = current
-        .and_then(|value| rows.iter().position(|row| row.value == value))
-        .unwrap_or(0);
+    let mut state = Browse {
+        rows,
+        what,
+        purpose,
+        filter: String::new(),
+        selected: current
+            .and_then(|value| rows.iter().position(|row| row.value == value))
+            .unwrap_or(0),
+    };
     let mut previews: HashMap<usize, Option<StatefulProtocol>> = HashMap::new();
 
     loop {
-        let shown: Vec<usize> = rows
-            .iter()
-            .enumerate()
-            .filter(|(_, row)| {
-                filter.is_empty() || row.label.to_lowercase().contains(&filter.to_lowercase())
-            })
-            .map(|(index, _)| index)
-            .collect();
-        if !shown.contains(&selected) {
-            selected = shown.first().copied().unwrap_or(0);
+        let shown = state.shown();
+        if !shown.contains(&state.selected) {
+            state.selected = shown.first().copied().unwrap_or(0);
         }
-
-        let preview = shown.contains(&selected).then(|| {
-            previews
-                .entry(selected)
-                .or_insert_with(|| load_preview(picker, rows[selected].preview.as_deref()))
-        });
+        let preview = shown
+            .contains(&state.selected)
+            .then(|| {
+                previews.entry(state.selected).or_insert_with(|| {
+                    load_preview(picker, rows[state.selected].preview.as_deref())
+                })
+            })
+            .and_then(|slot| slot.as_mut());
 
         terminal
-            .draw(|frame| {
-                let title = match (what, purpose) {
-                    (What::Catalog, _) => " riso - catalog ",
-                    (What::Themes, Purpose::Browse) => " riso - themes (browsing) ",
-                    (What::Themes, _) => " riso - themes ",
-                    (What::Backgrounds, Purpose::Browse) => " riso - backgrounds (browsing) ",
-                    (What::Backgrounds, _) => " riso - backgrounds ",
-                };
-                let [image_area, name_area, hint_area] = Layout::vertical([
-                    Constraint::Fill(1),
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                ])
-                .margin(1)
-                .areas(frame.area());
-
-                frame.render_widget(Block::bordered().title(title), frame.area());
-
-                match preview {
-                    Some(Some(protocol)) => {
-                        let widget =
-                            StatefulImage::<StatefulProtocol>::new().resize(Resize::Fit(None));
-                        frame.render_stateful_widget(widget, image_area, protocol);
-                    }
-                    _ => frame.render_widget(
-                        Paragraph::new("no preview").alignment(Alignment::Center),
-                        image_area,
-                    ),
-                }
-
-                let name = if shown.is_empty() {
-                    Line::from("nothing matches")
-                } else {
-                    let position = shown.iter().position(|i| *i == selected).unwrap_or(0);
-                    Line::from(format!(
-                        "< {} >  {}/{}",
-                        rows[selected].label,
-                        position + 1,
-                        shown.len()
-                    ))
-                    .style(Style::default().add_modifier(Modifier::BOLD))
-                };
-                frame.render_widget(Paragraph::new(name).alignment(Alignment::Center), name_area);
-
-                let hints = if filter.is_empty() {
-                    let action = match purpose {
-                        Purpose::Apply => "Enter applies",
-                        Purpose::Browse => "Enter does nothing",
-                        Purpose::Install => "Enter installs",
-                    };
-                    format!("type to filter - arrows move - {action} - Esc quits")
-                } else {
-                    format!("filter: {filter}  (Backspace edits, Esc clears)")
-                };
-                frame.render_widget(
-                    Paragraph::new(hints).alignment(Alignment::Center),
-                    hint_area,
-                );
-            })
+            .draw(|frame| state.draw(frame, &shown, preview))
             .map_err(|e| e.to_string())?;
 
         let ev = event::read().map_err(|e| e.to_string())?;
         if started.elapsed() < settle {
             continue;
         }
-        match ev {
-            Event::Key(key) if key.kind != KeyEventKind::Release => {
-                let step = |from: usize, forward: bool| -> usize {
-                    let Some(at) = shown.iter().position(|i| *i == from) else {
-                        return from;
-                    };
-                    let next = if forward {
-                        (at + 1) % shown.len()
-                    } else {
-                        (at + shown.len() - 1) % shown.len()
-                    };
-                    shown[next]
-                };
-                match key.code {
-                    KeyCode::Esc if !filter.is_empty() => filter.clear(),
-                    KeyCode::Esc => return Ok(Exit::Quit),
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        return Ok(Exit::Quit)
-                    }
-                    KeyCode::Enter if purpose != Purpose::Browse && !shown.is_empty() => {
-                        return Ok(Exit::Chosen(rows[selected].value.clone()))
-                    }
-                    KeyCode::Left | KeyCode::Up if !shown.is_empty() => {
-                        selected = step(selected, false)
-                    }
-                    KeyCode::Right | KeyCode::Down | KeyCode::Tab if !shown.is_empty() => {
-                        selected = step(selected, true)
-                    }
-                    KeyCode::Backspace => {
-                        filter.pop();
-                    }
-                    KeyCode::Char(c) => filter.push(c),
-                    _ => {}
+        if let Event::Key(key) = ev {
+            if key.kind != KeyEventKind::Release {
+                if let Some(exit) = state.on_key(key, &shown) {
+                    return Ok(exit);
                 }
             }
-            _ => {}
         }
     }
 }

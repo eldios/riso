@@ -55,14 +55,26 @@ pub fn run(
             .into_iter()
             .find(|t| &t.name == name)
     });
-
     let palette = match &theme {
         Some(theme) => load_palette(&theme.path).map_err(|e| e.to_string())?.0,
         None => riso_core::Palette::parse("").0.resolve(false).0,
     };
 
-    // The dry render over an empty target enumerates every output the
-    // template layers would produce, each with the layer that wins it.
+    template_rows(&mut rows, &palette, template_dirs)?;
+    if let (Some(name), Some(theme)) = (&theme_name, &theme) {
+        theme_rows(&mut rows, name, &theme.path);
+    }
+    plugin_rows(&mut rows, plugin_dirs)?;
+    Ok(rows.into_values().collect())
+}
+
+/// Every output the template layers would produce, each with the layer
+/// that wins it, from a dry render over an empty target.
+fn template_rows(
+    rows: &mut BTreeMap<(String, String), App>,
+    palette: &riso_core::Palette,
+    template_dirs: &[PathBuf],
+) -> Result<(), String> {
     let scratch = std::env::temp_dir().join(format!("riso-apps-{}", std::process::id()));
     let options = Options {
         template_dirs: template_dirs.to_vec(),
@@ -70,7 +82,7 @@ pub fn run(
         builtin: true,
         ..Default::default()
     };
-    let report = render_theme(&palette, &scratch, &options).map_err(|e| e.to_string())?;
+    let report = render_theme(palette, &scratch, &options).map_err(|e| e.to_string())?;
     for outcome in &report.outcomes {
         let (Outcome::Rendered {
             template, target, ..
@@ -94,48 +106,54 @@ pub fn run(
             },
         );
     }
+    Ok(())
+}
 
-    if let (Some(name), Some(theme)) = (&theme_name, &theme) {
-        if let Ok(entries) = std::fs::read_dir(&theme.path) {
-            for entry in entries.filter_map(Result::ok) {
-                let file = entry.file_name().to_string_lossy().into_owned();
-                if !entry.path().is_file() || file.starts_with('.') || is_metadata(&file) {
-                    continue;
-                }
-                let key = (stem(&file).to_owned(), file.clone());
-                let source = if rows.contains_key(&key) {
-                    format!("theme {name} (overrides a template)")
-                } else {
-                    format!("theme {name}")
-                };
-                rows.insert(
-                    key.clone(),
-                    App {
-                        name: key.0,
-                        source,
-                        detail: file,
-                    },
-                );
+/// The theme's own files, and its wallpapers as one row.
+fn theme_rows(rows: &mut BTreeMap<(String, String), App>, name: &str, path: &Path) {
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.filter_map(Result::ok) {
+            let file = entry.file_name().to_string_lossy().into_owned();
+            if !entry.path().is_file() || file.starts_with('.') || is_metadata(&file) {
+                continue;
             }
-        }
-        let backgrounds = theme.path.join("backgrounds");
-        if let Ok(images) = std::fs::read_dir(&backgrounds) {
-            let count = images.filter_map(Result::ok).count();
-            if count > 0 {
-                rows.insert(
-                    ("backgrounds".to_owned(), String::new()),
-                    App {
-                        name: "backgrounds".to_owned(),
-                        source: format!("theme {name}"),
-                        detail: format!("{count} wallpapers"),
-                    },
-                );
-            }
+            let key = (stem(&file).to_owned(), file.clone());
+            let source = if rows.contains_key(&key) {
+                format!("theme {name} (overrides a template)")
+            } else {
+                format!("theme {name}")
+            };
+            rows.insert(
+                key.clone(),
+                App {
+                    name: key.0,
+                    source,
+                    detail: file,
+                },
+            );
         }
     }
+    if let Ok(images) = std::fs::read_dir(path.join("backgrounds")) {
+        let count = images.filter_map(Result::ok).count();
+        if count > 0 {
+            rows.insert(
+                ("backgrounds".to_owned(), String::new()),
+                App {
+                    name: "backgrounds".to_owned(),
+                    source: format!("theme {name}"),
+                    detail: format!("{count} wallpapers"),
+                },
+            );
+        }
+    }
+}
 
-    let plugins = riso_core::plugin::discover(plugin_dirs).map_err(|e| e.to_string())?;
-    for plugin in plugins {
+/// What the installed plugins add.
+fn plugin_rows(
+    rows: &mut BTreeMap<(String, String), App>,
+    plugin_dirs: &[PathBuf],
+) -> Result<(), String> {
+    for plugin in riso_core::plugin::discover(plugin_dirs).map_err(|e| e.to_string())? {
         for render in &plugin.manifest.render {
             let file = render
                 .target
@@ -154,8 +172,7 @@ pub fn run(
             );
         }
     }
-
-    Ok(rows.into_values().collect())
+    Ok(())
 }
 
 pub fn print(apps: &[App]) {
