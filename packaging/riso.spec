@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.7.0
+Version:        0.7.1
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,9 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Fri Sep 04 2026 Emanuele Calo <me@lele.rip> - 0.7.1-1
+- The contact address in packaging, workflow and code of conduct is me@lele.rip.
+
 * Fri Sep 04 2026 Emanuele Calo <me@lele.rip> - 0.7.0-1
 - The command line is one module per command family; every source file is under 800 lines.
 - Image decoding is limited to png, jpeg and webp, dropping the unused avif and exr encoders.
