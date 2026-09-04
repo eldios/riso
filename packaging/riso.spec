@@ -1,7 +1,7 @@
 # Builds from an already-compiled binary, so the same artifact ships in every
 # package. Run `cargo build --release` first.
 Name:           riso
-Version:        0.6.3
+Version:        0.7.0
 Release:        1%{?dist}
 Summary:        Ricing framework for Linux desktops
 
@@ -33,6 +33,12 @@ install -Dm644 %{_sourcedir}/README.md %{buildroot}%{_datadir}/doc/%{name}/READM
 %doc %{_datadir}/doc/%{name}/README.md
 
 %changelog
+* Fri Sep 04 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.7.0-1
+- The command line is one module per command family; every source file is under 800 lines.
+- Image decoding is limited to png, jpeg and webp, dropping the unused avif and exr encoders.
+- Contributing guide, code of conduct, security policy, issue and pull request templates, dependabot.
+- The manual documents plugin and dev in full, with a PLUGINS section on the manifest.
+
 * Sat Aug 22 2026 Emanuele Calo <emanuele.lele.calo@gmail.com> - 0.6.3-1
 - Noctalia follows the theme on any desktop: config wire links its palette at the fragment, and every apply re-reads it and hands over the wallpaper.
 - The ownership store restores dangling symlinks correctly.
