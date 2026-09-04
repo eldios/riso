@@ -27,7 +27,7 @@ sed -i "s/^\.TH RISO 1 \"[^\"]*\" \"riso [^\"]*\"/.TH RISO 1 \"$MANDATE\" \"riso
 sed -i "s/^pkgver=.*/pkgver=$VERSION/" packaging/PKGBUILD packaging/PKGBUILD-bin
 sed -i "s/^Version:.*/Version:        $VERSION/" packaging/riso.spec
 
-ENTRY="* $RPMDATE Emanuele Calo <emanuele.lele.calo@gmail.com> - $VERSION-1"
+ENTRY="* $RPMDATE Emanuele Calo <me@lele.rip> - $VERSION-1"
 for line in "$@"; do
   ENTRY="$ENTRY
 - $line"

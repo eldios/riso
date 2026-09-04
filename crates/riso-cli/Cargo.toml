@@ -17,7 +17,7 @@ path = "src/main.rs"
 # licence land in the package without one.
 [package.metadata.deb]
 name = "riso"
-maintainer = "Emanuele Calo <emanuele.lele.calo@gmail.com>"
+maintainer = "Emanuele Calo <me@lele.rip>"
 depends = "git, curl"
 section = "utils"
 assets = [

@@ -1,4 +1,4 @@
-# Maintainer: Emanuele Calo <emanuele.lele.calo@gmail.com>
+# Maintainer: Emanuele Calo <me@lele.rip>
 # The development package: builds the tip of the repository. While the
 # repository is private the source goes over ssh; swap in the https URL once
 # it is public. The release PKGBUILD next to this one builds from tags.

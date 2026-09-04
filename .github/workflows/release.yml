@@ -43,7 +43,7 @@ jobs:
           pkgname: riso
           pkgbuild: ./packaging/PKGBUILD
           commit_username: eldios
-          commit_email: emanuele.lele.calo@gmail.com
+          commit_email: me@lele.rip
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: riso ${{ github.ref_name }}
           ssh_keyscan_types: rsa,ecdsa,ed25519
@@ -61,7 +61,7 @@ jobs:
           pkgname: riso-bin
           pkgbuild: ./packaging/PKGBUILD-bin
           commit_username: eldios
-          commit_email: emanuele.lele.calo@gmail.com
+          commit_email: me@lele.rip
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: riso-bin ${{ github.ref_name }}
           ssh_keyscan_types: rsa,ecdsa,ed25519
